@@ -1,0 +1,2 @@
+# Exploratory notebooks; the model lives in src/
+*.ipynb linguist-documentation
