@@ -17,7 +17,7 @@ One program over all 52,608 periods is not tractable, so **the horizon is decomp
 
 There are two decomposition implementations: a cutting-plane algorithm and a bissection (grid-search).
 
-The model lives in `src/battery_case/`, the formulation it implements is written out section by
+The model lives in `src/battery_plan/`, the formulation it implements is written out section by
 section in `docs/model/model.md`, and every number quoted in the documents comes from a committed run. 
 
 ## Index
@@ -69,14 +69,14 @@ The project uses [uv](https://docs.astral.sh/uv/). Python 3.12 is pinned in
 ```bash
 uv sync --all-groups            # create .venv, install runtime + dev deps
 
-uv run battery-case inputs      # load both spreadsheets, print spec + data quality
-uv run battery-case dispatch    # solve all three years (a few minutes)
+uv run battery-plan inputs      # load both spreadsheets, print spec + data quality
+uv run battery-plan dispatch    # solve all three years (a few minutes)
 ```
 
 `dispatch` writes the half-hourly plan to `data/results/` and prints the headline figures. Restrict it for a quick look:
 
 ```bash
-uv run battery-case dispatch --start 2018-01-01 --end 2018-01-31
+uv run battery-plan dispatch --start 2018-01-01 --end 2018-01-31
 ```
 
 | Flag | Default | What it changes |
@@ -92,7 +92,7 @@ uv run battery-case dispatch --start 2018-01-01 --end 2018-01-31
 A run reports itself in phases — inputs, horizon, calibrate, recover — and keeps
 one table row per pass of the cycle-value search, so a converging run looks
 different from a stuck one while it is still going. Results go to stdout and
-progress to stderr, so `uv run battery-case dispatch > summary.txt` still
+progress to stderr, so `uv run battery-plan dispatch > summary.txt` still
 captures the answer, and a redirected run drops the live display for timestamped
 lines on its own. `--progress json` emits the same events as JSON lines, which
 is enough to plot a run's convergence without solving it again.
@@ -141,7 +141,7 @@ make docker ARGS="dispatch --quiet"         # the same, through the Makefile
 The script builds before it runs — a cache no-op when nothing changed, so a
 code edit can never be run as a stale image — which makes one command enough
 from a fresh clone. Every flag in the table above works unchanged — the
-arguments go straight to `battery-case` — and results land in
+arguments go straight to `battery-plan` — and results land in
 `./data/results` on the host, mounted into the container, written as the
 invoking user rather than as root.
 
@@ -161,7 +161,7 @@ runs under emulation instead.
 Development:
 
 ```bash
-uv run pytest             # 118 tests, ~40 s
+uv run pytest             # 188 tests, ~60 s
 uv run mypy               # strict
 uv run ruff check . --fix
 uv run ruff format .
@@ -208,16 +208,23 @@ flowchart TD
 | [`docs/model/cycle-value-experiments.md`](docs/model/cycle-value-experiments.md) | Why a capped pass has no usable gradient, and both search methods measured against exactly solved instances: passes, λ, profit and the dual bound. |
 | [`docs/model/tractability.md`](docs/model/tractability.md) | Solve time against window length, and the whole horizon as one MILP: the measurements behind decomposing it. |
 | [`docs/glossary.md`](docs/glossary.md) | Every term the model, the code and the write-up use, the one word chosen for each idea, and the renames that choice implied. |
-| [`docs/validation.md`](docs/validation.md) | The 118 tests, what checking found that thinking had not, and the questions still open. |
+| [`docs/validation.md`](docs/validation.md) | The 188 tests, what checking found that thinking had not, and the questions still open. |
 | [`notebooks/02_results_analysis.ipynb`](notebooks/02_results_analysis.ipynb) | The dispatch read off the committed plan: every figure in `results.md` re-derived and diffed against the documented value, then the behaviour the prose only asserts — the price landscape, what the plan does with it, where the profit comes from, the cycle budget that did not bind, and the solver evidence. Solves nothing; runs in seconds. |
 
 ## Layout
 
 ```
-src/battery_case/
+src/battery_plan/
   cli.py              the two commands, `inputs` and `dispatch`, and every flag
+  dispatch.py         run_dispatch: one run from in-memory spec and prices,
+                      with a progress callback — what the CLI and the web
+                      solver both call
+  analysis.py         the readings of a plan and build_result_payload, the
+                      JSON a results page is drawn from
+  contracts.py        request → spec and config, and the params hash
   data_io/            loaders.py, paths.py, quality.py — read the two
-                      spreadsheets and report what is wrong with them
+                      spreadsheets or an uploaded price CSV, and report what
+                      is wrong with them
   data_models/        battery.py, market_prices.py — the spec and the price
                       series, validated on construction
   modelling/          the formulation: variables.py, constraints.py (§4),
@@ -225,8 +232,11 @@ src/battery_case/
                       half-hourly axis), rolling_horizon.py (the decomposition),
                       cycle_value/ (λ: cutting planes and bisection), policy.py,
                       parameters.py, plan.py
-  reporting.py        the headline figures and the progress phases
-tests/                118 tests, described in docs/validation.md
+  reporting.py        the headline figures and the progress phases, and the
+                      ProgressEvent a callback receives
+tests/                188 tests, described in docs/validation.md
+contracts/            JSON Schemas shared with the web API, their examples,
+                      the price-upload template and the params-hash rule
 data/raw/             the two spreadsheets supplied with the exercise
 data/results/         model outputs, written by a run and not committed
 docs/brief/           the exercise brief, as supplied
@@ -236,7 +246,8 @@ docs/model/           the formulation (model.md, model-stochastic.md), the
 docs/*.md             data, architecture, solve, cycle-budget, bisection,
                       validation, glossary
 notebooks/            exploratory analysis, paired .py and .ipynb
-scripts/              the measurement runs behind the documents (`make results`)
+scripts/              the measurement runs behind the documents (`make results`),
+                      and contract_examples.py, which writes contracts/examples/
 Dockerfile            the pinned runtime image; scripts/docker-run.sh drives it
 Makefile              render targets for the documents, `make results`, `make docker`
 pyproject.toml        deps, and the ruff / mypy / pytest configuration

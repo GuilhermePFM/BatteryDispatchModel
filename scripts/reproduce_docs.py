@@ -34,7 +34,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from battery_case.data_io.paths import PROJECT_ROOT, RESULTS_DIR
+from battery_plan.data_io.paths import PROJECT_ROOT, RESULTS_DIR
 
 #: Where logs and the run's summary go.
 LOG_DIR = RESULTS_DIR / "reproduce"
@@ -109,12 +109,12 @@ STAGES: tuple[Stage, ...] = (
         feeds="results.md §7, and the £207,365 of tractability.md",
         outputs=("data/results/dispatch_plan.csv",),
         minutes=13.0,
-        commands=((PY, "-m", "battery_case.cli", "dispatch", "--progress", "plain"),),
+        commands=((PY, "-m", "battery_plan.cli", "dispatch", "--progress", "plain"),),
         quick_commands=(
             (
                 PY,
                 "-m",
-                "battery_case.cli",
+                "battery_plan.cli",
                 "dispatch",
                 "--progress",
                 "plain",

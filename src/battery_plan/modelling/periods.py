@@ -20,7 +20,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from battery_case.data_models import MARKET_2_RESOLUTION, MarketPrices
+from battery_plan.data_models import MARKET_2_RESOLUTION, MarketPrices
 
 #: Length of a settlement period on the common settlement, in hours (§2, ``dt``).
 PERIOD_HOURS = 0.5

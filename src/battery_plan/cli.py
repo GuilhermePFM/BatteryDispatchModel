@@ -1,4 +1,4 @@
-"""Command line entry point: ``battery-case``."""
+"""Command line entry point: ``battery-plan``."""
 
 from __future__ import annotations
 
@@ -10,23 +10,17 @@ from pathlib import Path
 
 import pandas as pd
 
-from battery_case.data_io import load_battery_spec, load_market_prices, price_quality_report
-from battery_case.data_io.paths import BATTERY_SPEC_XLSX, MARKET_PRICES_XLSX, RESULTS_DIR
-from battery_case.modelling import ModelParameters, RollingPolicy, build_periods, summarise
-from battery_case.modelling.cycle_value.calibrated_policy import CalibratedPolicy
-from battery_case.modelling.cycle_value.oracle import CycleOracle, DualSearchResult
-from battery_case.modelling.cycle_value.searches import DEFAULT_SEARCH, SEARCHES, search_named
-from battery_case.modelling.rolling_horizon import PERIODS_PER_DAY
-from battery_case.reporting import (
-    PROGRESS_MODES,
-    RunPlan,
-    make_reporter,
-    passes_phrase,
-)
+from battery_plan.data_io import load_battery_spec, load_market_prices, price_quality_report
+from battery_plan.data_io.paths import BATTERY_SPEC_XLSX, MARKET_PRICES_XLSX, RESULTS_DIR
+from battery_plan.dispatch import DispatchConfig, DispatchInterrupted, run_dispatch
+from battery_plan.modelling import ModelParameters, summarise
+from battery_plan.modelling.cycle_value.oracle import CycleOracle, DualSearchResult
+from battery_plan.modelling.cycle_value.searches import DEFAULT_SEARCH, SEARCHES
+from battery_plan.reporting import PROGRESS_MODES, make_reporter, passes_phrase
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="battery-case", description=__doc__)
+    parser = argparse.ArgumentParser(prog="battery-plan", description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     inputs = subparsers.add_parser("inputs", help="Print the loaded battery spec and price data")
@@ -112,65 +106,32 @@ def _cmd_dispatch(args: argparse.Namespace) -> int:
     """Dispatch the horizon, reporting each phase as it goes.
 
     The split that matters here is the old one, kept strict: the *result* goes
-    to stdout, so ``battery-case dispatch > summary.txt`` still captures it,
+    to stdout, so ``battery-plan dispatch > summary.txt`` still captures it,
     and everything about the run in progress goes to the reporter on stderr.
+    The run itself is :func:`~battery_plan.dispatch.run_dispatch`; what is left
+    here is the files on either side of it.
     """
     started = time.perf_counter()
     reporter = make_reporter("none" if args.quiet else args.progress)
 
-    loading = time.perf_counter()
     spec = load_battery_spec(args.spec)
     prices = load_market_prices(args.prices)
-    quality = price_quality_report(prices)
-
-    params = ModelParameters.from_spec(spec)
-    settlement = build_periods(prices).between(args.start, _end_of_day(args.end))
-    policy = RollingPolicy(
-        commit_periods=args.commit_days * PERIODS_PER_DAY,
-        lookahead_periods=args.lookahead_days * PERIODS_PER_DAY,
+    config = DispatchConfig(
+        start=args.start,
+        end=args.end,
+        commit_days=args.commit_days,
+        lookahead_days=args.lookahead_days,
+        search=args.search,
     )
-
-    reporter.run_started(
-        RunPlan(
-            start=settlement.timestamps[0],
-            end=settlement.timestamps[-1],
-            periods=len(settlement),
-            period_minutes=params.dt * 60.0,
-            windows=policy.window_count(len(settlement)),
-            commit_periods=policy.commit_periods,
-            lookahead_periods=policy.lookahead_periods,
-            power_mw=params.max_discharge_mw,
-            volume_mwh=params.nominal_volume_mwh,
-            round_trip_efficiency=params.round_trip_efficiency,
-            cycle_budget=params.cycle_budget,
-            out_path=str(args.out),
-        )
-    )
-    reporter.phase(
-        "inputs",
-        "done",
-        f"spec + 2 price series \u00b7 {int(quality['duplicate_timestamps'].sum())} duplicates "
-        f"\u00b7 {int(quality['missing_prices'].sum())} missing prices",
-        elapsed=time.perf_counter() - loading,
-    )
-    reporter.phase(
-        "horizon",
-        "done",
-        f"{len(settlement):,} periods \u2192 {policy.window_count(len(settlement)):,} windows",
-    )
-
-    calibrated = CalibratedPolicy(
-        search=search_named(args.search), policy=policy, reporter=reporter
-    )
-    oracle = calibrated.oracle_for(settlement, params)
     try:
-        result = calibrated.calibrate_and_dispatch(settlement, params, oracle=oracle)
-    except KeyboardInterrupt:
-        return _interrupted(oracle, args, params)
+        run = run_dispatch(
+            spec, prices, config, reporter=reporter, out_path=str(args.out), started=started
+        )
+    except DispatchInterrupted as stop:
+        return _interrupted(stop.oracle, args, stop.params)
 
-    reporter.run_finished(time.perf_counter() - started, result.passes)
-    _print_results(result, params, args.search)
-    _write(result.plan, Path(args.out))
+    _print_results(run.search, run.params, args.search)
+    _write(run.plan, Path(args.out))
     return 0
 
 
@@ -291,14 +252,6 @@ def _write(plan: pd.DataFrame, out: Path) -> None:
     else:
         plan.to_csv(out)
     print(f"\n-> {out}  ({len(plan):,} rows)")
-
-
-def _end_of_day(value: str | None) -> pd.Timestamp | None:
-    """Read ``--end`` as inclusive of the whole day when no time is given."""
-    if value is None:
-        return None
-    end = pd.Timestamp(value)
-    return end + pd.Timedelta(days=1) if end.normalize() == end else end
 
 
 def main(argv: Sequence[str] | None = None) -> int:

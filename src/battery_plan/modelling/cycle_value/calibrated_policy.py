@@ -2,10 +2,10 @@
 
 :class:`CalibratedPolicy` adapts a search to the ``DispatchPolicy`` protocol, so
 that a calibrated run is still "prices in, plan out" as far as
-:func:`~battery_case.modelling.plan.summarise`, the CLI and the notebooks
+:func:`~battery_plan.modelling.plan.summarise`, the CLI and the notebooks
 are concerned. Which method it runs comes from
-:mod:`~battery_case.modelling.cycle_value.searches`; what the method does with the
-horizon is :mod:`~battery_case.modelling.cycle_value.oracle`.
+:mod:`~battery_plan.modelling.cycle_value.searches`; what the method does with the
+horizon is :mod:`~battery_plan.modelling.cycle_value.oracle`.
 """
 
 from __future__ import annotations
@@ -14,13 +14,13 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
-from battery_case.data_models import BatterySpec, MarketPrices
-from battery_case.modelling.cycle_value.oracle import CycleOracle, DualSearch, DualSearchResult
-from battery_case.modelling.cycle_value.searches import DEFAULT_SEARCH, SEARCHES
-from battery_case.modelling.parameters import ModelParameters
-from battery_case.modelling.periods import SettlementPeriods, build_periods
-from battery_case.modelling.rolling_horizon import RollingPolicy
-from battery_case.reporting import NullReporter, Reporter
+from battery_plan.data_models import BatterySpec, MarketPrices
+from battery_plan.modelling.cycle_value.oracle import CycleOracle, DualSearch, DualSearchResult
+from battery_plan.modelling.cycle_value.searches import DEFAULT_SEARCH, SEARCHES
+from battery_plan.modelling.parameters import ModelParameters
+from battery_plan.modelling.periods import SettlementPeriods, build_periods
+from battery_plan.modelling.rolling_horizon import RollingPolicy
+from battery_plan.reporting import NullReporter, Reporter
 
 
 @dataclass(frozen=True, slots=True)

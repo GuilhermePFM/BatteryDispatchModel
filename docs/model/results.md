@@ -23,7 +23,7 @@ cycle budget:
 | Periods charging / discharging / idle | 16,774 / 15,179 / 20,655 of 52,608 |
 | Profit per cycle spent | £60.23 |
 
-Reproduce with `uv run battery-case dispatch`, which writes the half-hourly
+Reproduce with `uv run battery-plan dispatch`, which writes the half-hourly
 plan every figure above is read off; the figures in the reading below are
 re-derived from that plan by
 [`scripts/results_figures.py`](../../scripts/results_figures.py), and both

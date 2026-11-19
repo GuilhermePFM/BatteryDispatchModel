@@ -14,21 +14,21 @@ from dataclasses import replace
 import pulp
 import pytest
 
-from battery_case.modelling.constraints import (
+from battery_plan.modelling.constraints import (
     DEFAULT_BLOCKS,
     UNCAPPED_BLOCKS,
     cycle_life_cap,
     energy_balance,
     relaxing,
 )
-from battery_case.modelling.cycle_value.bisection import BisectionSearch
-from battery_case.modelling.cycle_value.calibrated_policy import CalibratedPolicy
-from battery_case.modelling.cycle_value.cutting_plane import CuttingPlaneSearch, solve_master
-from battery_case.modelling.cycle_value.oracle import CycleOracle, DualPoint
-from battery_case.modelling.cycle_value.searches import SEARCHES, search_named
-from battery_case.modelling.parameters import ModelParameters
-from battery_case.modelling.periods import SettlementPeriods
-from battery_case.modelling.window_problem import build_problem, default_solver
+from battery_plan.modelling.cycle_value.bisection import BisectionSearch
+from battery_plan.modelling.cycle_value.calibrated_policy import CalibratedPolicy
+from battery_plan.modelling.cycle_value.cutting_plane import CuttingPlaneSearch, solve_master
+from battery_plan.modelling.cycle_value.oracle import CycleOracle, DualPoint
+from battery_plan.modelling.cycle_value.searches import SEARCHES, search_named
+from battery_plan.modelling.parameters import ModelParameters
+from battery_plan.modelling.periods import SettlementPeriods
+from battery_plan.modelling.window_problem import build_problem, default_solver
 from tests.helpers import SPEC, TOLERANCE, assert_feasible, make_periods
 
 #: The whole budget of the instance below, in equivalent full cycles.

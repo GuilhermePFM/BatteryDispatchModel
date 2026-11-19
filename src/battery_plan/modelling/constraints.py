@@ -1,13 +1,13 @@
 """The formulation of §3 to §4.7: the objective, and one block per constraint.
 
 Each section of the write-up is a function that takes the problem and a
-:class:`~battery_case.modelling.variables.ModelContext` and adds its own rows,
+:class:`~battery_plan.modelling.variables.ModelContext` and adds its own rows,
 naming them as the write-up does.
-:func:`~battery_case.modelling.window_problem.build_problem` folds
+:func:`~battery_plan.modelling.window_problem.build_problem` folds
 :data:`DEFAULT_BLOCKS` over the problem, so the formulation is a list of
 sections rather than one body, and a section can be read, tested, or left out
 on its own. The variables and the state the blocks read are declared in
-:mod:`battery_case.modelling.variables`.
+:mod:`battery_plan.modelling.variables`.
 
 Two formulation choices are visible here. The effective volume S_max(t) is
 substituted out rather than carried as a variable, as §4.7 permits, so §4.1
@@ -21,8 +21,8 @@ from collections.abc import Callable
 
 import pulp
 
-from battery_case.modelling.periods import PERIODS_PER_HOUR
-from battery_case.modelling.variables import ModelContext
+from battery_plan.modelling.periods import PERIODS_PER_HOUR
+from battery_plan.modelling.variables import ModelContext
 
 #: A constraint family: adds its own rows to the problem, reads nothing back.
 ConstraintBlock = Callable[[pulp.LpProblem, ModelContext], None]

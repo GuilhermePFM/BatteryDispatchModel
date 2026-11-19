@@ -34,7 +34,7 @@ This page is the other one: a bisection on cycle use. It is kept for
 Both methods are measured against each other, and against exactly solved
 instances, in
 [cycle-value experiments §2](model/cycle-value-experiments.md#2-what-each-method-costs-against-a-known-answer).
-Select this one with `battery-case dispatch --search bisection`.
+Select this one with `battery-plan dispatch --search bisection`.
 
 ## What the search is searching over
 

@@ -3,8 +3,8 @@
 Plain containers only — no loading, no modelling.
 """
 
-from battery_case.data_models.battery import BatterySpec
-from battery_case.data_models.market_prices import (
+from battery_plan.data_models.battery import BatterySpec
+from battery_plan.data_models.market_prices import (
     MARKET_1_RESOLUTION,
     MARKET_2_RESOLUTION,
     MarketPrices,

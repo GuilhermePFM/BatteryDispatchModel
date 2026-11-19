@@ -15,7 +15,7 @@ measured in one place rather than asserted by each method.
 
 What the methods do *not* share is the subproblem. A method that reads a
 subgradient needs the cap removed and replaced by the cycle value
-(:data:`~battery_case.modelling.constraints.UNCAPPED_BLOCKS`), because a window
+(:data:`~battery_plan.modelling.constraints.UNCAPPED_BLOCKS`), because a window
 that still caps the count reports the same clipped number at every λ and so no
 usable slope; a method that reads only "was the budget exhausted" needs the cap
 in place. The ``relaxed`` flag on :meth:`CycleOracle.at` is therefore the
@@ -30,11 +30,11 @@ from typing import Protocol
 
 import pandas as pd
 
-from battery_case.modelling.constraints import DEFAULT_BLOCKS, UNCAPPED_BLOCKS
-from battery_case.modelling.parameters import ModelParameters
-from battery_case.modelling.periods import SettlementPeriods
-from battery_case.modelling.rolling_horizon import RollingPolicy
-from battery_case.reporting import NullReporter, PassReport, Reporter
+from battery_plan.modelling.constraints import DEFAULT_BLOCKS, UNCAPPED_BLOCKS
+from battery_plan.modelling.parameters import ModelParameters
+from battery_plan.modelling.periods import SettlementPeriods
+from battery_plan.modelling.rolling_horizon import RollingPolicy
+from battery_plan.reporting import NullReporter, PassReport, Reporter
 
 #: Fraction of the budget that may go unspent while it still counts as used up.
 SPENT_TOLERANCE = 1e-3

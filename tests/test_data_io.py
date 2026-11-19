@@ -5,8 +5,8 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from battery_case.data_io import load_battery_spec, load_market_prices, price_quality_report
-from battery_case.data_io.paths import BATTERY_SPEC_XLSX, MARKET_PRICES_XLSX
+from battery_plan.data_io import load_battery_spec, load_market_prices, price_quality_report
+from battery_plan.data_io.paths import BATTERY_SPEC_XLSX, MARKET_PRICES_XLSX
 
 pytestmark = pytest.mark.skipif(
     not (BATTERY_SPEC_XLSX.exists() and MARKET_PRICES_XLSX.exists()),

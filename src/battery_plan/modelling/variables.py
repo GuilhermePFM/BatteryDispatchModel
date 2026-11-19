@@ -5,7 +5,7 @@
 :class:`BatteryState` is what one window hands to the next: the store and the
 cycle count at the end of it.
 
-The constraints themselves live in :mod:`battery_case.modelling.constraints`,
+The constraints themselves live in :mod:`battery_plan.modelling.constraints`,
 which reads this module and is not read by it.
 """
 
@@ -15,8 +15,8 @@ from dataclasses import dataclass
 
 import pulp
 
-from battery_case.modelling.parameters import ModelParameters
-from battery_case.modelling.periods import SettlementPeriods
+from battery_plan.modelling.parameters import ModelParameters
+from battery_plan.modelling.periods import SettlementPeriods
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,10 +54,10 @@ class DispatchVariables:
         """Add the variables to ``problem``, bounded by the spec (§2, §4.1).
 
         ``n_cyc`` is left without an upper bound on purpose, so that
-        :func:`~battery_case.modelling.constraints.cycle_life_cap` is the only
+        :func:`~battery_plan.modelling.constraints.cycle_life_cap` is the only
         place the budget of §4.6 is imposed and omitting that block really
         relaxes it. The cycle count is bounded anyway:
-        :func:`~battery_case.modelling.constraints.cycle_accounting` ties it to
+        :func:`~battery_plan.modelling.constraints.cycle_accounting` ties it to
         the discharge of each period, which §4.3 rate-limits.
         """
         return cls(

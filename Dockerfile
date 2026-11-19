@@ -23,7 +23,7 @@ ARG GROUPS=--no-dev
 COPY pyproject.toml uv.lock README.md ./
 RUN uv sync --frozen --no-install-project $GROUPS
 
-# Then the project. src/battery_case/data_io/paths.py resolves the inputs
+# Then the project. src/battery_plan/data_io/paths.py resolves the inputs
 # relative to the package, so the tree has to keep its shape: data/raw next to
 # src/, which is why the spreadsheets are copied rather than mounted.
 COPY src/ src/
@@ -38,5 +38,5 @@ RUN uv sync --frozen $GROUPS
 RUN mkdir -p data/results
 VOLUME ["/app/data/results"]
 
-ENTRYPOINT ["battery-case"]
+ENTRYPOINT ["battery-plan"]
 CMD ["dispatch"]

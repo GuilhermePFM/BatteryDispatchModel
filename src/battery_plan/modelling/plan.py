@@ -15,8 +15,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from battery_case.modelling.parameters import ModelParameters
-from battery_case.modelling.periods import SettlementPeriods
+from battery_plan.modelling.parameters import ModelParameters
+from battery_plan.modelling.periods import SettlementPeriods
 
 #: Power below this is the solver's zero, not a decision to trade (MW).
 #:

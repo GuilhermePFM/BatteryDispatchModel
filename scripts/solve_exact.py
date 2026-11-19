@@ -19,10 +19,10 @@ from pathlib import Path
 
 import pulp
 
-from battery_case.data_io.loaders import load_battery_spec, load_market_prices
-from battery_case.modelling.parameters import ModelParameters
-from battery_case.modelling.periods import build_periods
-from battery_case.modelling.window_problem import build_problem, default_solver
+from battery_plan.data_io.loaders import load_battery_spec, load_market_prices
+from battery_plan.modelling.parameters import ModelParameters
+from battery_plan.modelling.periods import build_periods
+from battery_plan.modelling.window_problem import build_problem, default_solver
 
 #: Columns of ``tractability.csv``, in the order that file carries them.
 FIELDS = (

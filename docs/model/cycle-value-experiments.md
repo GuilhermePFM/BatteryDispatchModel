@@ -14,8 +14,8 @@ cutting-plane method on the Lagrangian dual. Both are implemented
 both are selectable:
 
 ```bash
-uv run battery-case dispatch                         # cutting planes, the default
-uv run battery-case dispatch --search bisection      # the reference method
+uv run battery-plan dispatch                         # cutting planes, the default
+uv run battery-plan dispatch --search bisection      # the reference method
 uv run python scripts/compare_searches.py 30        # every method on one instance
 uv run python scripts/sweep_searches.py            # every method, 1 to 90 days
 uv run python scripts/sweep_searches.py 365 all --search cutting-plane --no-exact

@@ -6,8 +6,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from battery_case.data_models import MarketPrices
-from battery_case.modelling.periods import PERIODS_PER_HOUR, build_periods
+from battery_plan.data_models import MarketPrices
+from battery_plan.modelling.periods import PERIODS_PER_HOUR, build_periods
 
 
 def _prices(hours: int, *, market_1: list[float] | None = None) -> MarketPrices:

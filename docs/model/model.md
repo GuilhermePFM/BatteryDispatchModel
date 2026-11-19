@@ -496,7 +496,7 @@ approximates, so a bound quoted from decomposed evaluations is sound only as far
 as that approximation holds.
 
 Both methods are implemented and both are selectable with
-`battery-case dispatch --search {cutting-plane,bisection}`, cutting planes
+`battery-plan dispatch --search {cutting-plane,bisection}`, cutting planes
 being the default: it costs fewer passes and returns the bound above. They share
 one evaluation oracle and differ in the subproblem they ask it for: bisection
 reads one bit from a *capped* pass, the cutting-plane method a value and a

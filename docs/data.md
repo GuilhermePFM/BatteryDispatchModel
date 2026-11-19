@@ -48,7 +48,7 @@ in `build_periods`, where it is a modelling step rather than a loading one.
 
 ## The quirks, surfaced and deliberately not repaired
 
-`uv run battery-case inputs` prints a quality report. `price_quality_report`
+`uv run battery-plan inputs` prints a quality report. `price_quality_report`
 counts duplicate timestamps, irregular steps and monotonicity per market, and
 *returns* them. It is not a cleaner: how to treat these periods is a modelling
 decision, so it is made visibly in `modelling/periods.py` rather than invisibly on

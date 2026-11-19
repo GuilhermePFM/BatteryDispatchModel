@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from battery_case.data_models import BatterySpec
-from battery_case.modelling.periods import PERIOD_HOURS
+from battery_plan.data_models import BatterySpec
+from battery_plan.modelling.periods import PERIOD_HOURS
 
 #: Half-hourly periods in a calendar year, for pro-rating the cycle budget.
 PERIODS_PER_YEAR = int(365.25 * 24 / PERIOD_HOURS)

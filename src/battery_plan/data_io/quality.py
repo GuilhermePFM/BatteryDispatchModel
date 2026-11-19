@@ -1,14 +1,14 @@
 """Description of the input data: what the spreadsheets actually contain.
 
 Reporting only — the anomalies are surfaced here and dealt with (or not) by
-:mod:`battery_case.modelling`.
+:mod:`battery_plan.modelling`.
 """
 
 from __future__ import annotations
 
 import pandas as pd
 
-from battery_case.data_models import MARKET_1_RESOLUTION, MARKET_2_RESOLUTION, MarketPrices
+from battery_plan.data_models import MARKET_1_RESOLUTION, MARKET_2_RESOLUTION, MarketPrices
 
 
 def price_quality_report(prices: MarketPrices) -> pd.DataFrame:

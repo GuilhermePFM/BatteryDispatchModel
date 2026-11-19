@@ -33,14 +33,14 @@ from dataclasses import dataclass
 
 import pulp
 
-from battery_case.modelling.cycle_value.oracle import (
+from battery_plan.modelling.cycle_value.oracle import (
     CycleOracle,
     DualBound,
     DualPoint,
     DualSearchResult,
 )
-from battery_case.modelling.window_problem import default_solver
-from battery_case.reporting import (
+from battery_plan.modelling.window_problem import default_solver
+from battery_plan.reporting import (
     Column,
     Figure,
     SearchPlan,

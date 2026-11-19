@@ -25,14 +25,14 @@ from collections.abc import Sequence
 
 import pulp
 
-from battery_case.data_io.loaders import load_battery_spec, load_market_prices
-from battery_case.data_io.paths import PROJECT_ROOT
-from battery_case.modelling.cycle_value.oracle import CycleOracle
-from battery_case.modelling.cycle_value.searches import SEARCHES
-from battery_case.modelling.parameters import ModelParameters
-from battery_case.modelling.periods import build_periods
-from battery_case.modelling.rolling_horizon import PERIODS_PER_DAY, RollingPolicy
-from battery_case.modelling.window_problem import build_problem, default_solver
+from battery_plan.data_io.loaders import load_battery_spec, load_market_prices
+from battery_plan.data_io.paths import PROJECT_ROOT
+from battery_plan.modelling.cycle_value.oracle import CycleOracle
+from battery_plan.modelling.cycle_value.searches import SEARCHES
+from battery_plan.modelling.parameters import ModelParameters
+from battery_plan.modelling.periods import build_periods
+from battery_plan.modelling.rolling_horizon import PERIODS_PER_DAY, RollingPolicy
+from battery_plan.modelling.window_problem import build_problem, default_solver
 
 #: Horizons to sweep, in days — the progression of ``tractability.csv``.
 DEFAULT_DAYS = (1, 2, 4, 7, 14, 30, 60, 90)

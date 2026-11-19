@@ -10,12 +10,12 @@
 # Results are written to ./data/results on the host, as a native run would.
 set -euo pipefail
 
-IMAGE=${IMAGE:-battery-case}
+IMAGE=${IMAGE:-battery-plan}
 REPO_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 RESULTS_DIR=${RESULTS_DIR:-$REPO_ROOT/data/results}
 
 if ! command -v docker >/dev/null 2>&1; then
-  echo "docker not found: install Docker, or run the model natively with 'uv run battery-case'." >&2
+  echo "docker not found: install Docker, or run the model natively with 'uv run battery-plan'." >&2
   exit 127
 fi
 

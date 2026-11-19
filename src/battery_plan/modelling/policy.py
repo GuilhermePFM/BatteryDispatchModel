@@ -3,7 +3,7 @@
 Anything implementing :class:`DispatchPolicy` can be run against the data and have
 its plan scored the same way, which keeps the CLI, the tests and the
 notebooks independent of how the decision is reached.
-:class:`~battery_case.modelling.rolling_horizon.RollingPolicy` is the implementation
+:class:`~battery_plan.modelling.rolling_horizon.RollingPolicy` is the implementation
 of the formulation in ``docs/model/model.md``; a heuristic benchmark would
 implement the same protocol.
 """
@@ -14,7 +14,7 @@ from typing import Protocol
 
 import pandas as pd
 
-from battery_case.data_models import BatterySpec, MarketPrices
+from battery_plan.data_models import BatterySpec, MarketPrices
 
 
 class DispatchPolicy(Protocol):
@@ -24,8 +24,8 @@ class DispatchPolicy(Protocol):
         """Return the dispatch plan, indexed by settlement period.
 
         The columns are those of
-        :data:`battery_case.modelling.plan.COLUMNS`, so that
-        :func:`~battery_case.modelling.plan.summarise` can score any
+        :data:`battery_plan.modelling.plan.COLUMNS`, so that
+        :func:`~battery_plan.modelling.plan.summarise` can score any
         policy's output.
         """
         ...

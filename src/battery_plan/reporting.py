@@ -1,4 +1,4 @@
-"""CLI reporting.
+"""Run reporting: what a dispatch says about itself while it runs.
 
 A calibrated dispatch is a loop of loops: a search spends *passes*, and each
 pass walks the horizon *window* by window.
@@ -6,7 +6,7 @@ pass walks the horizon *window* by window.
 The modelling code should not know what a terminal is, so what it emits is
 *events*: a run started, a pass started, a window committed, a pass finished.
 :class:`Reporter` is the seam, exactly as
-:class:`~battery_case.modelling.cycle_value.oracle.DualSearch` is the seam for
+:class:`~battery_plan.modelling.cycle_value.oracle.DualSearch` is the seam for
 the method itself, and the default is :class:`NullReporter` so a test or a
 notebook runs silent without arranging anything.
 
@@ -21,9 +21,14 @@ Four renderings sit behind that seam, chosen by :func:`make_reporter`:
   back without re-running anything.
 * :class:`NullReporter`, the default.
 
+A fifth sits beside them for a caller that is not reading a stream at all:
+:class:`CallbackReporter` reduces the same events to a :class:`ProgressEvent`
+per change — pass, estimated passes, fraction done, cycle value, elapsed — for
+a job that stores its progress rather than printing it.
+
 The table a search fills is split in two. The columns every method shares —
 pass, cycle value, cycles, overspend, profit — belong to this module, because
-they come off a :class:`~battery_case.modelling.cycle_value.oracle.DualPoint`
+they come off a :class:`~battery_plan.modelling.cycle_value.oracle.DualPoint`
 whatever found it. The columns that differ belong to the search, which declares
 them in a :class:`SearchPlan` and fills them per pass, so a renderer can lay out
 cutting planes and bisection without knowing how either method works.
@@ -43,14 +48,14 @@ import json
 import math
 import sys
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import IO, Literal, Protocol
 
 import pandas as pd
 
-from battery_case.modelling.rolling_horizon import WindowProgress
+from battery_plan.modelling.rolling_horizon import WindowProgress
 
 #: How often the live region may redraw, in seconds. Fast enough to look live,
 #: slow enough that the terminal is not the bottleneck on a short window.
@@ -497,7 +502,7 @@ class ConsoleReporter(NullReporter):
         arrow = "→" if self._unicode else "->"
         self._commit(
             "",
-            self._paint("battery-case · dispatch", "white"),
+            self._paint("battery-plan · dispatch", "white"),
             self._paint(rule, "dim"),
             self._field(
                 "horizon",
@@ -913,6 +918,160 @@ class JsonReporter(NullReporter):
 
     def run_finished(self, elapsed: float, passes: int) -> None:
         self._emit("run_finished", elapsed=elapsed, passes=passes)
+
+
+@dataclass(frozen=True, slots=True)
+class ProgressEvent:
+    """Where a run has got to, as one flat record a caller can store as it is.
+
+    For a caller that is not a terminal — a job writing its progress to a
+    database every few seconds — the stream of reporter events is too fine and
+    too shaped by layout. This is the same run reduced to the numbers a
+    progress bar needs.
+
+    ``fraction`` is of the whole *run*, and for cutting planes it is an
+    estimate: the pass count is not known up front, so ``passes_estimated`` is
+    projected from the gaps seen so far, as the console footer projects it, and
+    is ``None`` until there is something to project from; ``passes_max`` is
+    the method's ceiling, ``None`` until the search has started. ``fraction``
+    never goes backwards, and reaches ``1.0`` only when the run has finished.
+    """
+
+    phase: str
+    pass_index: int
+    passes_estimated: int | None
+    passes_max: int | None
+    pass_fraction: float
+    fraction: float
+    cycle_value: float
+    elapsed: float
+    done: bool = False
+
+
+class CallbackReporter(NullReporter):
+    """Turn reporter events into :class:`ProgressEvent` s for ``on_progress``.
+
+    It renders nothing, and it forwards every event to ``inner`` unchanged, so
+    a run can feed a callback and a terminal at the same time.
+    """
+
+    def __init__(
+        self,
+        on_progress: Callable[[ProgressEvent], None],
+        inner: Reporter | None = None,
+    ) -> None:
+        self._on_progress = on_progress
+        self._inner: Reporter = inner if inner is not None else NullReporter()
+        self._started = time.perf_counter()
+        self._phase = "inputs"
+        self._search: SearchPlan | None = None
+        self._pass = 0
+        self._finished = 0
+        self._pass_fraction = 0.0
+        self._cycle_value = 0.0
+        self._gaps: list[float] = []
+        self._fraction = 0.0
+
+    def _emit(self, *, done: bool = False) -> None:
+        plan = self._search
+        max_passes = plan.max_passes if plan is not None else None
+        estimated = self._passes_estimated()
+        if done:
+            fraction = 1.0
+        else:
+            # Until a pass count can be projected, allow for one more pass than
+            # the one in flight: a bar that then jumps to done reads better
+            # than one that reaches the end and has to start again.
+            total = estimated if estimated is not None else self._pass + 1
+            in_flight = self._pass_fraction if self._pass > self._finished else 0.0
+            progress = (self._finished + in_flight) / total
+            fraction = min(progress, 0.99)
+        self._fraction = max(self._fraction, fraction)
+        self._on_progress(
+            ProgressEvent(
+                phase=self._phase,
+                pass_index=self._pass,
+                passes_estimated=self._finished if done else estimated,
+                passes_max=max_passes,
+                pass_fraction=self._pass_fraction,
+                fraction=self._fraction,
+                cycle_value=self._cycle_value,
+                elapsed=time.perf_counter() - self._started,
+                done=done,
+            )
+        )
+
+    def _passes_estimated(self) -> int | None:
+        """The console footer's projection, as a total rather than as passes left."""
+        plan = self._search
+        if plan is None:
+            return None
+        if plan.passes_known:
+            return plan.max_passes
+        if len(self._gaps) < 2:
+            return None
+        left = _passes_to_close(self._gaps, plan.tolerance)
+        return min(max(self._pass, self._finished + left), plan.max_passes)
+
+    def run_started(self, plan: RunPlan) -> None:
+        self._inner.run_started(plan)
+        self._emit()
+
+    def phase(
+        self,
+        name: str,
+        state: PhaseState,
+        detail: str = "",
+        elapsed: float | None = None,
+    ) -> None:
+        self._inner.phase(name, state, detail, elapsed)
+        self._phase = name
+        self._emit()
+
+    def search_started(self, plan: SearchPlan) -> None:
+        self._inner.search_started(plan)
+        self._search = plan
+
+    def pass_started(self, index: int, cycle_value: float, *, relaxed: bool, label: str) -> None:
+        self._inner.pass_started(index, cycle_value, relaxed=relaxed, label=label)
+        self._pass = index
+        self._pass_fraction = 0.0
+        self._cycle_value = cycle_value
+        self._emit()
+
+    def window_done(self, progress: WindowProgress) -> None:
+        self._inner.window_done(progress)
+        self._pass_fraction = progress.fraction
+        self._emit()
+
+    def pass_finished(self, report: PassReport, cells: Cells = EMPTY_CELLS) -> None:
+        self._inner.pass_finished(report, cells)
+        if report.cached:
+            return
+        self._finished = report.index
+        self._pass_fraction = 1.0
+        if report.gap is not None:
+            self._gaps.append(report.gap)
+        self._emit()
+
+    def search_finished(self, summary: SearchSummary) -> None:
+        self._inner.search_finished(summary)
+        self._cycle_value = summary.cycle_value
+
+    def note(self, text: str) -> None:
+        self._inner.note(text)
+
+    def interrupted(self, lines: Sequence[str]) -> None:
+        self._inner.interrupted(lines)
+
+    def failed(self, title: str, lines: Sequence[str]) -> None:
+        self._inner.failed(title, lines)
+
+    def run_finished(self, elapsed: float, passes: int) -> None:
+        self._inner.run_finished(elapsed, passes)
+        self._phase = "done"
+        self._finished = passes
+        self._emit(done=True)
 
 
 #: The renderings ``--progress`` chooses between. ``auto`` reads the terminal.

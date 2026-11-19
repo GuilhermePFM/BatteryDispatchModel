@@ -28,7 +28,7 @@ flowchart TD
 
 ## Binary variables issue
 
-`battery-case dispatch` over the full three years is **1,096 mixed-integer
+`battery-plan dispatch` over the full three years is **1,096 mixed-integer
 programs**. The horizon carries a binary per period, the §4.3 exclusivity of
 charging and discharging, and solve time grows steeply *and erratically* with
 window length:

@@ -19,7 +19,7 @@ from any plan. It runs against synthetic shapes, the clock-change week, and
 the full three-year output.
 
 ```bash
-uv run pytest        # 118 tests, ~40 s. The MILP tests need no spreadsheet,
+uv run pytest        # 188 tests, ~60 s. The MILP tests need no spreadsheet,
                      # the loader tests need no solver.
 ```
 
@@ -34,6 +34,10 @@ uv run pytest        # 118 tests, ~40 s. The MILP tests need no spreadsheet,
 | `test_cycle_value.py` | 14 | The two cycle-budget searches of §6: that a relaxed pass really overspends the budget and a capped one reports no usable slope, that the oracle counts and reuses its passes, the master LP's envelope minimum against cuts whose answer is known on paper, both methods reaching the same plan, and the dual bound holding above an exactly solved optimum |
 | `test_cli.py` | 4 | Both commands end to end, including the written plan's dates and length, and that the result stays on stdout under every progress mode |
 | `test_historical_slices.py` | 32 | The model against frozen optima on real slices of Attachment 2: five single days and three whole weeks. For each, that the rolling policy of §6 reaches the slice's exact optimum, that `summarise` reconciles with it, that energy left in the store was never paid for, and — the slow half of the suite — that the frozen optimum still re-solves as the optimum, so the reference values cannot rot behind a change to the formulation |
+| `test_dispatch.py` | 7 | `run_dispatch`, the in-memory seam the CLI and the solver job share: the plan it returns is the CSV the CLI writes, the progress callback only moves forward and ends `done`, a binding budget reports each pass, the dates trim the horizon, and an uploaded file dispatches like the prices it was written from |
+| `test_price_csv.py` | 18 | The uploaded price CSV: a good file at both resolutions, offsets and header spelling forgiven, the template round-tripping byte for byte, and each bad file — empty, missing column, non-number, bad timestamp, duplicate, gap, out of order, off the half hour, part hour, Market 2 varying within its hour — rejected with a message naming the line |
+| `test_analysis.py` | 14 | The readings in `analysis.py` on a solved synthetic plan: daily rows summing to the headline, the exact profit split, zero constraint violations on a solved plan and one on a broken one, the mean day, the representative week, and the result payload as plain JSON whose columns agree in length and whose one-year size stays well inside a DynamoDB item |
+| `test_contracts.py` | 31 | The JSON Schemas in `contracts/`: each valid draft 2020-12, each example valid, bad requests and a result-less success rejected, a synthetic and a real payload valid against `result`, and the params-hash vectors, canonical JSON and the bundled prices' hash reproducing |
 | `test_reporting.py` | 19 | What a run says while it runs: that a search is silent unless asked, that each method fills its own columns and bisection quotes no bound, that the early exit and both recovery outcomes are announced, that a cache hit is reported as one, that a redirected stream gets no cursor control, and the pass projection from a contracting gap |
 
 A strict `mypy` pass and `ruff` run alongside.

@@ -2,11 +2,11 @@
 
 One window is one call to the solver. The horizon is covered by solving a
 sequence of windows that hand their end state to the next
-(:mod:`battery_case.modelling.rolling_horizon`); the formulation is the same whether the
+(:mod:`battery_plan.modelling.rolling_horizon`); the formulation is the same whether the
 window is a day or the whole horizon.
 
 The formulation itself — the objective of §3 and the constraints of §4 — lives
-in :mod:`battery_case.modelling.constraints`, one function per section.
+in :mod:`battery_plan.modelling.constraints`, one function per section.
 :func:`build_problem` only declares the variables and folds those blocks over
 the problem, so this module holds how a window is solved, not what it says.
 """
@@ -19,14 +19,14 @@ from typing import Any
 import numpy as np
 import pulp
 
-from battery_case.modelling.constraints import (
+from battery_plan.modelling.constraints import (
     DEFAULT_BLOCKS,
     ConstraintBlock,
     profit_objective,
 )
-from battery_case.modelling.parameters import ModelParameters
-from battery_case.modelling.periods import PERIODS_PER_HOUR, SettlementPeriods
-from battery_case.modelling.variables import (
+from battery_plan.modelling.parameters import ModelParameters
+from battery_plan.modelling.periods import PERIODS_PER_HOUR, SettlementPeriods
+from battery_plan.modelling.variables import (
     EMPTY_BATTERY,
     BatteryState,
     DispatchVariables,
@@ -69,7 +69,7 @@ def solve_window(
     ``cycle_value`` is what one equivalent full cycle is worth, in £, charged
     to the objective so that a window solved in isolation still weighs cycle
     life against the spread in front of it. It is zero in the undecomposed
-    model; :func:`battery_case.modelling.cycle_value.searches.calibrate_cycle_value` sets
+    model; :func:`battery_plan.modelling.cycle_value.searches.calibrate_cycle_value` sets
     it when the cycle budget binds.
     """
     problem, var = build_problem(settlement, params, state, cycle_value=cycle_value, blocks=blocks)
@@ -102,10 +102,10 @@ def build_problem(
     """Assemble the MILP for one window without solving it.
 
     ``blocks`` are the constraint families to impose, defaulting to the whole of
-    §4 (:data:`~battery_case.modelling.constraints.DEFAULT_BLOCKS`). Leaving one
+    §4 (:data:`~battery_plan.modelling.constraints.DEFAULT_BLOCKS`). Leaving one
     out solves the model without that constraint, which is how a constraint is
     valued: omitting
-    :func:`~battery_case.modelling.constraints.hourly_commitment`, say, gives
+    :func:`~battery_plan.modelling.constraints.hourly_commitment`, say, gives
     the profit Market 2's hourly commitment (§4.5) costs.
     """
     problem = pulp.LpProblem("battery_dispatch", pulp.LpMaximize)
