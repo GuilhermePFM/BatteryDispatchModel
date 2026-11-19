@@ -1,5 +1,5 @@
 [project]
-name = "battery-case"
+name = "batteryplan"
 version = "0.1.0"
 description = "Battery dispatch model maximising arbitrage profit across two wholesale electricity markets"
 readme = "README.md"
@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.scripts]
-battery-case = "battery_case.cli:main"
+battery-plan = "battery_plan.cli:main"
 
 [dependency-groups]
 dev = [
@@ -25,6 +25,20 @@ dev = [
     "jupyterlab>=4.3",
     "ipykernel>=7.4.0",
     "seaborn>=0.13.2",
+    "jsonschema>=4.26.0",
+    "moto[dynamodb,s3,sqs]>=5.0",
+    { include-group = "solver" },
+    { include-group = "aws" },
+]
+# What the solver Lambda (services/solver/) needs beyond the package, installed
+# into its image.
+solver = [
+    "jsonschema>=4.26.0",
+]
+# The AWS SDK, which the Lambda base image already provides: only for running
+# the solver locally and for its tests.
+aws = [
+    "boto3>=1.35",
 ]
 
 [build-system]
@@ -32,11 +46,11 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/battery_case"]
+packages = ["src/battery_plan"]
 
 [tool.ruff]
 line-length = 100
-src = ["src", "tests"]
+src = ["src", "tests", "services/solver"]
 
 [tool.ruff.lint]
 select = [
@@ -60,6 +74,8 @@ select = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The solver Lambda's handler is a top-level module, as it is in its image.
+pythonpath = ["services/solver"]
 addopts = "-q"
 markers = [
     "slow: re-derives a reference value by an exact solve; seconds, not milliseconds",
@@ -67,10 +83,11 @@ markers = [
 
 [tool.mypy]
 python_version = "3.12"
-files = ["src", "tests"]
+files = ["src", "tests", "services/solver"]
+mypy_path = "services/solver"
 strict = true
 warn_unreachable = true
 
 [[tool.mypy.overrides]]
-module = ["pulp.*", "matplotlib.*"]
+module = ["pulp.*", "matplotlib.*", "jsonschema.*", "boto3.*", "botocore.*", "moto.*"]
 ignore_missing_imports = true
