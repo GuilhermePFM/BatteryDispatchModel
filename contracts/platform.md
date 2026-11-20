@@ -62,7 +62,11 @@ Days are UTC. `run_id` is a ULID (26 chars, Crockford base32).
 - On receiving a job: move the run `queued → running` on condition
   `status = queued`. If the condition fails the message is a redelivery:
   log and return without work.
-- Progress: write `progress` at most every 3 s, plus once at the end.
+- Progress: write `progress` at once on the first event and on each new phase
+  or pass, otherwise at most every 3 s, plus once at the end.
+- Deadline: solve within the invocation's remaining time less 45 s for the
+  writes that follow; a search out of time stops early with a within-budget
+  plan and `certificate.stopped_early = true`.
 - Success: put the plan CSV at `plans/<run_id>.csv`, then set `succeeded`,
   `result_json`, `plan_csv_key`, `finished_at`.
 - An error the user caused (`PriceFileError` → `prices_invalid`, a

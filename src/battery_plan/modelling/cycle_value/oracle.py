@@ -25,6 +25,7 @@ method's own choice, which is why a search is a search rule *and* a relaxation.
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import Protocol
 
@@ -38,6 +39,14 @@ from battery_plan.reporting import NullReporter, PassReport, Reporter
 
 #: Fraction of the budget that may go unspent while it still counts as used up.
 SPENT_TOLERANCE = 1e-3
+
+#: How much longer than the slowest pass so far the next one is allowed to
+#: take, when a deadline decides whether there is time for it.
+PASS_SAFETY = 1.5
+
+#: Why a search stopped before its own criterion said so: the deadline left
+#: too little time for another pass and the one that recovers a plan.
+STOPPED_FOR_TIME = "time_limit"
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,7 +110,10 @@ class DualSearchResult:
 
     ``bound`` is ``None`` when the method has nothing to certify with — the
     absence of a certificate is a type here rather than a sentinel number, so a
-    report cannot quote a bound a method never computed.
+    report cannot quote a bound a method never computed. ``stop_reason`` is
+    ``None`` when the method stopped on its own terms, and
+    :data:`STOPPED_FOR_TIME` when the deadline cut it short; the plan is
+    deliverable either way, and the bound says how far from optimal it can be.
     """
 
     cycle_value: float
@@ -110,6 +122,11 @@ class DualSearchResult:
     cycles: float
     passes: int
     bound: DualBound | None = None
+    stop_reason: str | None = None
+
+    @property
+    def stopped_early(self) -> bool:
+        return self.stop_reason is not None
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,12 +141,19 @@ class CycleOracle:
     :meth:`at`, so wiring the ``reporter`` here reports both methods and any
     later one for free, and a cache hit is reported as a cache hit rather than
     as a pass that finished implausibly fast.
+
+    ``deadline`` is a reading of ``clock`` (:func:`time.perf_counter` unless a
+    test injects its own) by which the search should have returned its plan,
+    or ``None`` for no limit. The oracle times its passes on the same clock,
+    so :meth:`can_afford` compares like with like.
     """
 
     settlement: SettlementPeriods
     params: ModelParameters
     policy: RollingPolicy = field(default_factory=RollingPolicy)
     reporter: Reporter = field(default_factory=NullReporter, repr=False, compare=False)
+    deadline: float | None = field(default=None, compare=False)
+    clock: Callable[[], float] = field(default=time.perf_counter, repr=False, compare=False)
     _points: list[DualPoint] = field(default_factory=list, repr=False, compare=False)
     _reported: set[int] = field(default_factory=set, repr=False, compare=False)
     _cache: dict[tuple[float, bool], DualPoint] = field(
@@ -150,6 +174,19 @@ class CycleOracle:
     def points(self) -> tuple[DualPoint, ...]:
         """Every pass solved, in the order it was asked for."""
         return tuple(self._points)
+
+    def can_afford(self, passes: int) -> bool:
+        """Whether ``passes`` more passes fit before the deadline.
+
+        A pass is estimated at :data:`PASS_SAFETY` times the slowest one so
+        far, so the test is ``remaining >= PASS_SAFETY * passes * slowest``.
+        With no deadline, or no pass yet to estimate from, the answer is yes:
+        a search cannot return a plan without spending at least one pass.
+        """
+        if self.deadline is None or not self._points:
+            return True
+        slowest = max(point.elapsed for point in self._points)
+        return self.deadline - self.clock() >= PASS_SAFETY * passes * slowest
 
     def at(self, cycle_value: float, *, relaxed: bool, label: str = "") -> DualPoint:
         """Dispatch the horizon charged ``cycle_value`` per cycle, and read the pass.
@@ -218,9 +255,9 @@ class CycleOracle:
                 else self.reporter.window_done
             ),
         )
-        started = time.perf_counter()
+        started = self.clock()
         plan = policy.dispatch(self.settlement, self.params)
-        elapsed = time.perf_counter() - started
+        elapsed = self.clock() - started
 
         profit = float(plan["net_revenue_gbp"].sum())
         cycles = float(plan["cycles"].iloc[-1])

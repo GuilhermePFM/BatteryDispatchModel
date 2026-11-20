@@ -192,7 +192,7 @@ func request(capex int, extra ...string) string {
 	return fmt.Sprintf(`{"battery":{"max_charge_rate_mw":2,"max_discharge_rate_mw":2,"max_storage_volume_mwh":4,
 "charging_loss_fraction":0.05,"discharging_loss_fraction":0.05,"lifetime_years":10,"lifetime_cycles":5000,
 "degradation_pct_per_cycle":0.001,"capex_gbp":%d,"fixed_opex_gbp_per_year":5000},
-"start":"2018-01-01","end":"2018-01-03","commit_days":1,"lookahead_days":1%s}`, capex, strings.Join(extra, ""))
+"start":"2018-01-01","end":"2018-01-03"%s}`, capex, strings.Join(extra, ""))
 }
 
 func (e *env) usage(user string) quota.Usage {

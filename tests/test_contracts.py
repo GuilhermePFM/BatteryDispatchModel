@@ -29,6 +29,7 @@ from battery_plan.data_io import load_market_prices
 from battery_plan.data_io.paths import MARKET_PRICES_XLSX, PROJECT_ROOT
 from battery_plan.dispatch import DispatchConfig, run_dispatch
 from battery_plan.modelling import ModelParameters, RollingPolicy
+from battery_plan.modelling.cycle_value import CuttingPlaneSearch, CycleOracle
 from tests.helpers import SPEC, make_periods
 
 CONTRACTS = PROJECT_ROOT / "contracts"
@@ -68,8 +69,8 @@ def _request(**changes: Any) -> dict[str, Any]:
 @pytest.mark.parametrize(
     "request_body",
     [
-        _request(lookahead_days=3),
-        _request(commit_days=0),
+        _request(lookahead_days=1),
+        _request(commit_days=1),
         _request(search="bisection"),
         _request(prices_key=None),
         _request(start="1 Jan 2018"),
@@ -112,6 +113,25 @@ def test_a_payload_built_from_a_synthetic_plan_validates() -> None:
     json.dumps(payload, allow_nan=False)
 
 
+def test_a_payload_from_a_search_stopped_early_validates_and_says_so() -> None:
+    """A deadline already passed: one relaxed pass, then the recovery, and a
+    certificate that admits it and still quantifies the plan against its bound."""
+    cheap, dear = [20.0] * 24, [100.0] * 24
+    settlement = make_periods((cheap + dear) * 3)
+    params = ModelParameters.from_spec(SPEC, cycle_budget=1.0)
+    oracle = CycleOracle(settlement=settlement, params=params, deadline=float("-inf"))
+    search = CuttingPlaneSearch().search(oracle)
+
+    payload = build_result_payload(search.plan, SPEC, params, search)
+
+    _validator("result").validate(payload)
+    certificate = payload["certificate"]
+    assert certificate["stopped_early"] is True
+    assert certificate["stop_reason"] == "time_limit"
+    assert certificate["passes"] == 2
+    assert certificate["plan_gap"] >= 0
+
+
 requires_prices = pytest.mark.skipif(
     not MARKET_PRICES_XLSX.exists(), reason="raw spreadsheets are not present"
 )
@@ -145,7 +165,7 @@ def test_the_hash_ignores_where_prices_are_stored_but_not_what_they_are() -> Non
     assert stored == params_hash({**request, "prices_key": "uploads/b.csv"}, "ab" * 32)
     assert stored != params_hash(request, "cd" * 32)
     assert params_hash(request, BUNDLED_PRICES_SHA256) != params_hash(
-        _request(lookahead_days=2), BUNDLED_PRICES_SHA256
+        _request(cycle_budget=100), BUNDLED_PRICES_SHA256
     )
 
 

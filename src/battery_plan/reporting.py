@@ -1031,6 +1031,7 @@ class CallbackReporter(NullReporter):
     def search_started(self, plan: SearchPlan) -> None:
         self._inner.search_started(plan)
         self._search = plan
+        self._emit()  # passes_max is known from here, before the first pass ends
 
     def pass_started(self, index: int, cycle_value: float, *, relaxed: bool, label: str) -> None:
         self._inner.pass_started(index, cycle_value, relaxed=relaxed, label=label)

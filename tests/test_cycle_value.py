@@ -23,11 +23,16 @@ from battery_plan.modelling.constraints import (
 )
 from battery_plan.modelling.cycle_value.bisection import BisectionSearch
 from battery_plan.modelling.cycle_value.calibrated_policy import CalibratedPolicy
-from battery_plan.modelling.cycle_value.cutting_plane import CuttingPlaneSearch, solve_master
-from battery_plan.modelling.cycle_value.oracle import CycleOracle, DualPoint
+from battery_plan.modelling.cycle_value.cutting_plane import (
+    CuttingPlaneSearch,
+    best_evaluation,
+    solve_master,
+)
+from battery_plan.modelling.cycle_value.oracle import STOPPED_FOR_TIME, CycleOracle, DualPoint
 from battery_plan.modelling.cycle_value.searches import SEARCHES, search_named
 from battery_plan.modelling.parameters import ModelParameters
 from battery_plan.modelling.periods import SettlementPeriods
+from battery_plan.modelling.rolling_horizon import RollingPolicy, WindowProgress
 from battery_plan.modelling.window_problem import build_problem, default_solver
 from tests.helpers import SPEC, TOLERANCE, assert_feasible, make_periods
 
@@ -143,6 +148,24 @@ def test_the_master_stays_inside_its_box() -> None:
     assert cycle_value == pytest.approx(50.0)
 
 
+def test_a_pass_beaten_at_its_own_value_does_not_make_the_gap_negative() -> None:
+    """A rolling pass is not an exact maximiser, so another pass's plan can do
+    better at its λ. Here the pass at λ = 4 reports L = 5 while the plan from
+    λ = 0 earns 10 - 4 = 6 there. Reading the bound as min L would give 5,
+    below the master's envelope minimum of 5.5: a negative gap, and a "bound"
+    a known plan beats. The bound is the cuts' envelope at each evaluated λ."""
+    cuts = [_point(0.0, 10.0, -1.0), _point(4.0, 5.0, 1.0)]
+    envelope, _ = solve_master(cuts, upper_bound=50.0)
+
+    best, bound = best_evaluation(cuts)
+
+    assert envelope == pytest.approx(5.5)
+    assert min(cut.lagrangian for cut in cuts) < envelope  # the old reading
+    assert best.cycle_value == 4.0
+    assert bound == pytest.approx(6.0)
+    assert bound >= envelope
+
+
 def test_both_methods_find_the_schedule_that_spends_the_cycle_best() -> None:
     """§6. The methods differ in passes and in the cycle value they report, not in
     the dispatch: the deliverable is the dear day, bought cheap and sold at 400."""
@@ -216,6 +239,73 @@ def test_a_calibrated_dispatcher_is_a_dispatcher() -> None:
     assert list(result.plan.columns) == list(
         CalibratedPolicy().calibrate_and_dispatch(_grid(), _params()).plan.columns
     )
+
+
+class _Clock:
+    """A clock that only moves when a window is solved: ten seconds a window."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+    def window(self, progress: WindowProgress) -> None:
+        self.now += 10.0
+
+
+def _timed_oracle(deadline: float | None) -> tuple[CycleOracle, _Clock]:
+    """The instance above on the fake clock: three windows, so 30 s a pass."""
+    clock = _Clock()
+    oracle = CycleOracle(
+        settlement=_grid(),
+        params=_params(),
+        policy=RollingPolicy(on_window=clock.window),
+        deadline=deadline,
+        clock=clock,
+    )
+    return oracle, clock
+
+
+def test_a_deadline_stops_the_search_and_still_recovers_a_plan_within_budget() -> None:
+    """After one 30 s pass, 70 s are left: short of 1.5 x (pass + recovery) = 90 s.
+    So the search stops, recovers a capped plan at its best value, and finishes
+    inside the deadline with a bound that says how far from optimal it may be."""
+    oracle, clock = _timed_oracle(deadline=100.0)
+
+    result = CuttingPlaneSearch().search(oracle)
+
+    assert result.stopped_early and result.stop_reason == STOPPED_FOR_TIME
+    assert result.passes == 2  # one relaxed pass, then the recovery
+    assert not oracle.points[0].within_budget and not oracle.points[1].relaxed
+    assert clock.now <= 100.0
+    assert result.cycles <= BUDGET + TOLERANCE
+    assert_feasible(result.plan, _params())
+    assert result.bound is not None
+    assert result.bound.lagrangian >= result.profit - TOLERANCE
+    assert result.profit < BEST_PROFIT
+
+
+def test_a_deadline_with_room_to_spare_changes_nothing() -> None:
+    oracle, _ = _timed_oracle(deadline=10_000.0)
+    timed = CuttingPlaneSearch().search(oracle)
+    free = CuttingPlaneSearch().search(_oracle())
+
+    assert not timed.stopped_early and timed.stop_reason is None
+    assert (timed.passes, timed.profit, timed.cycle_value) == pytest.approx(
+        (free.passes, free.profit, free.cycle_value)
+    )
+
+
+def test_bisection_under_a_deadline_returns_its_best_capped_plan() -> None:
+    oracle, clock = _timed_oracle(deadline=100.0)
+
+    result = BisectionSearch(upper_bound=5_000.0).search(oracle)
+
+    assert result.stopped_early
+    assert result.passes == 2  # 30 s each, and 45 s needed for a third
+    assert clock.now <= 100.0
+    assert result.cycles <= BUDGET + TOLERANCE
 
 
 def test_an_unknown_method_names_the_ones_there_are() -> None:

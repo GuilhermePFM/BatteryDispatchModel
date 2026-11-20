@@ -25,7 +25,13 @@ against moto (`uv run pytest tests/test_solver_handler.py`).
 3. Load the prices: the bundled spreadsheet (read once per warm container), or
    the uploaded CSV through `load_market_prices_csv`. Check both dates lie
    inside them.
-4. Run `run_dispatch`, writing `progress` at most every 3 s.
+4. Run `run_dispatch`, writing `progress` at once on each new phase or pass
+   and otherwise at most every 3 s. Every web run commits one day with one day
+   of lookahead (`config_from_request`). The dispatch gets a deadline: the
+   invocation's remaining time (`context.get_remaining_time_in_millis()`)
+   less `FINISH_MARGIN` (45 s) for the steps below. A search that cannot fit
+   another pass plus the recovery pass before the deadline stops early. It
+   still returns a within-budget plan, with `certificate.stopped_early = true`.
 5. Put the plan at `plans/<run_id>.csv`, then set `succeeded`, `result_json`
    (compact JSON), `plan_csv_key`, the final `progress` and `finished_at`.
 
@@ -43,6 +49,7 @@ Anything else raises, and the redrive policy hands the message to the DLQ.
 | `DATA_BUCKET` | where plans go |
 | `AWS_ENDPOINT_URL` | LocalStack only |
 | `QUEUE_URL` | the jobs queue; `local_worker.py` only |
+| `SOLVER_TIMEOUT_SECONDS` | the timeout of the synthetic Lambda context `local_worker.py` hands the handler, default 600 (the deployed function's) |
 | `PRICES_XLSX`, `CONTRACTS_DIR` | set by the image; default to the repo's copies |
 
 ## Locally

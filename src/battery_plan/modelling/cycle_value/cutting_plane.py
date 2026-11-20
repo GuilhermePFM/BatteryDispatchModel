@@ -18,11 +18,15 @@ Two things make it an algorithm that returns a *plan*. A relaxed pass may
 overspend the budget, and an infeasible plan is not an answer, so the search
 ends with one capped pass at the value it settled on — unless the best relaxed
 pass already respects the budget, in which case its plan is deliverable and
-the recovery pass is skipped. And Kelley's iterates are known to zigzag, the
-classical remedy being a proximal or trust-region term; on a scalar ``λ`` it is
-unnecessary, but a time-varying allowance (§4.6) would need one multiplier per
-quota period and a stabilised master, which is the main structural argument for
-this method over a one-dimensional search.
+the recovery pass is skipped. The same pass is what lets a run with a deadline
+stop early: before each pass the search checks that the time left covers that
+pass and the recovery after it, and when it does not, it recovers at once at the
+best value found, with the gap so far as the plan's certificate. And Kelley's
+iterates are known to zigzag, the classical remedy being a proximal or
+trust-region term; on a scalar ``λ`` it is unnecessary, but a time-varying
+allowance (§4.6) would need one multiplier per quota period and a stabilised
+master, which is the main structural argument for this method over a
+one-dimensional search.
 """
 
 from __future__ import annotations
@@ -34,6 +38,7 @@ from dataclasses import dataclass
 import pulp
 
 from battery_plan.modelling.cycle_value.oracle import (
+    STOPPED_FOR_TIME,
     CycleOracle,
     DualBound,
     DualPoint,
@@ -90,10 +95,15 @@ class CuttingPlaneSearch:
         cuts: list[DualPoint] = []
         cycle_value = 0.0
         envelope = -math.inf
+        stop_reason: str | None = None
 
         for _ in range(self.max_passes):
+            # Time for the next relaxed pass and the capped one that recovers a plan?
+            if cuts and not oracle.can_afford(2):
+                stop_reason = STOPPED_FOR_TIME
+                break
             cuts.append(oracle.at(cycle_value, relaxed=True))
-            best_dual = min(cut.lagrangian for cut in cuts)
+            _, best_dual = best_evaluation(cuts)
 
             started = time.perf_counter()
             envelope, next_cycle_value = solve_master(cuts, self.upper_bound)
@@ -105,9 +115,10 @@ class CuttingPlaneSearch:
                 break
             cycle_value = next_cycle_value
 
-        best = min(cuts, key=lambda cut: cut.lagrangian)
-        bound = DualBound(lagrangian=best.lagrangian, envelope=envelope)
-        reporter.phase("calibrate", "done", f"converged \u00b7 {passes_phrase(oracle.passes)}")
+        best, best_dual = best_evaluation(cuts)
+        bound = DualBound(lagrangian=best_dual, envelope=envelope)
+        outcome = "converged" if stop_reason is None else "stopped for the time limit"
+        reporter.phase("calibrate", "done", f"{outcome} \u00b7 {passes_phrase(oracle.passes)}")
         reporter.search_finished(
             SearchSummary(
                 cycle_value=best.cycle_value,
@@ -133,6 +144,7 @@ class CuttingPlaneSearch:
             cycles=deliverable.cycles,
             passes=oracle.passes,
             bound=bound,
+            stop_reason=stop_reason,
         )
 
     def _report_pass(
@@ -152,7 +164,7 @@ class CuttingPlaneSearch:
         """
         reporter = oracle.reporter
         point = cuts[-1]
-        best_dual = min(cut.lagrangian for cut in cuts)
+        _, best_dual = best_evaluation(cuts)
         gap = (best_dual - envelope) / abs(best_dual) if best_dual else 0.0
 
         reporter.pass_finished(
@@ -204,6 +216,29 @@ class CuttingPlaneSearch:
         reporter.pass_finished(oracle.pass_report(capped, recovery=True))
         reporter.phase("recover", "done", "plan is within budget", elapsed=capped.elapsed)
         return capped
+
+
+def best_evaluation(cuts: list[DualPoint]) -> tuple[DualPoint, float]:
+    """The pass with the lowest dual value, and that value: the search's upper bound.
+
+    A pass's dual value is read off *every* plan solved so far, not only its
+    own: ``L(λ_i) >= max_j L(λ_j) + g_j (λ_i - λ_j)``, since each plan is
+    feasible for the relaxed problem at any ``λ``. A rolling pass is not an
+    exact maximiser — finite lookahead makes it a heuristic — so another
+    pass's plan can beat it at its own ``λ``, and its own ``L`` then
+    understates the dual there. Taking the lowest such value of ``L`` alone
+    lets the bound fall below the master's envelope minimum (a negative gap)
+    and below a plan it is meant to bound. The cuts' upper envelope at
+    ``λ_i`` is the honest reading, and it is never below the envelope minimum.
+    """
+
+    def value(point: DualPoint) -> float:
+        return max(
+            cut.lagrangian + cut.subgradient * (point.cycle_value - cut.cycle_value) for cut in cuts
+        )
+
+    best = min(cuts, key=value)
+    return best, value(best)
 
 
 def solve_master(cuts: list[DualPoint], upper_bound: float) -> tuple[float, float]:

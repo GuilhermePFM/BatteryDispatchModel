@@ -30,6 +30,12 @@ BUNDLED_PRICES_SHA256 = "f26dc09b7eb4bcb3755b615c0595132937dee3dbb4b82e915648be7
 #: The search every web run uses; the request has no field for it.
 WEB_SEARCH = DEFAULT_SEARCH
 
+#: The window scheme of every web run: commit a day with the next in view.
+#: §6 finds that more foresight or longer commits add nothing on this data,
+#: so the request has no fields for them; the CLI keeps its flags.
+WEB_COMMIT_DAYS = 1
+WEB_LOOKAHEAD_DAYS = 1
+
 
 def spec_from_request(request: Mapping[str, Any]) -> BatterySpec:
     """The battery of a validated run request, field for field."""
@@ -37,7 +43,7 @@ def spec_from_request(request: Mapping[str, Any]) -> BatterySpec:
 
 
 def config_from_request(request: Mapping[str, Any]) -> DispatchConfig:
-    """The horizon and window scheme of a validated run request.
+    """The horizon of a validated run request, on the web's fixed window scheme.
 
     ``end`` is a date, so it includes the whole of that day.
     """
@@ -45,8 +51,8 @@ def config_from_request(request: Mapping[str, Any]) -> DispatchConfig:
     return DispatchConfig(
         start=request["start"],
         end=request["end"],
-        commit_days=int(request["commit_days"]),
-        lookahead_days=int(request["lookahead_days"]),
+        commit_days=WEB_COMMIT_DAYS,
+        lookahead_days=WEB_LOOKAHEAD_DAYS,
         search=WEB_SEARCH,
         cycle_budget=None if budget is None else float(budget),
     )

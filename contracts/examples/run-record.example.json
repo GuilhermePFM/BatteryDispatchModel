@@ -2,7 +2,7 @@
   "version": 1,
   "run_id": "01JD3X7Q8RZK5V2N4M6P9T0WYA",
   "user_sub": "3f1c9a2e-7b4d-4e8a-9c61-2d5f0b8e7a43",
-  "params_hash": "029e15ead221a01ee217cb4ded0f5f8a9be3298f6df5ad6fe003b4e9af85fba6",
+  "params_hash": "42b8449a308cbe544c9edefe454778d553e6dc1ea369a60b7a5dfabf51a1c774",
   "status": "succeeded",
   "request": {
     "battery": {
@@ -18,9 +18,7 @@
       "fixed_opex_gbp_per_year": 5000
     },
     "start": "2018-01-01",
-    "end": "2018-01-03",
-    "commit_days": 1,
-    "lookahead_days": 1
+    "end": "2018-01-03"
   },
   "created_at": "2026-11-18T09:30:58Z",
   "updated_at": "2026-11-18T09:31:12Z",
@@ -34,7 +32,7 @@
     "pass_fraction": 1.0,
     "fraction": 1.0,
     "cycle_value": 0.0,
-    "elapsed": 0.16816039899276802,
+    "elapsed": 0.1637107169999581,
     "done": true,
     "updated_at": "2026-11-18T09:31:12Z"
   },
@@ -80,6 +78,8 @@
     "certificate": {
       "cycle_value": 0.0,
       "passes": 1,
+      "stopped_early": false,
+      "stop_reason": null,
       "dual_bound_gbp": 480.9656151521849,
       "dual_gap": 0.0,
       "plan_gap": 0.0

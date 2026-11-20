@@ -40,7 +40,7 @@ request() { # request CAPEX [EXTRA JSON FIELDS]
               charging_loss_fraction: 0.05, discharging_loss_fraction: 0.05, lifetime_years: 10,
               lifetime_cycles: 5000, degradation_pct_per_cycle: 0.001, capex_gbp: $capex,
               fixed_opex_gbp_per_year: 5000},
-    start: "2018-01-01", end: "2018-01-02", commit_days: 1, lookahead_days: 1} + $extra'
+    start: "2018-01-01", end: "2018-01-02"} + $extra'
 }
 # A capex nobody else has used, so the first run is not answered from the cache.
 capex=$((100000 + RANDOM * 30 + $(date +%S)))

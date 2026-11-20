@@ -1,7 +1,7 @@
 {
   "version": 1,
   "run_id": "01JD3X7Q8RZK5V2N4M6P9T0WYA",
-  "params_hash": "029e15ead221a01ee217cb4ded0f5f8a9be3298f6df5ad6fe003b4e9af85fba6",
+  "params_hash": "42b8449a308cbe544c9edefe454778d553e6dc1ea369a60b7a5dfabf51a1c774",
   "user_sub": "3f1c9a2e-7b4d-4e8a-9c61-2d5f0b8e7a43",
   "request": {
     "battery": {
@@ -17,9 +17,7 @@
       "fixed_opex_gbp_per_year": 5000
     },
     "start": "2018-01-01",
-    "end": "2018-01-03",
-    "commit_days": 1,
-    "lookahead_days": 1
+    "end": "2018-01-03"
   },
   "prices": {
     "source": "bundled"

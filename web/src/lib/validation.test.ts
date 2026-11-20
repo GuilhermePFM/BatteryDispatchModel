@@ -25,7 +25,6 @@ describe("schema-driven fields", () => {
     expect(values.battery.max_charge_rate_mw).toBe("2");
     expect(values.battery.degradation_pct_per_cycle).toBe("0.001");
     expect(values.battery.capex_gbp).toBe("500000");
-    expect(values.commit_days).toBe("1");
     expect(values.cycle_budget).toBe("");
   });
 
@@ -51,11 +50,9 @@ describe("validate", () => {
     expect(validate(defaultValues())).toEqual({});
   });
 
-  it("enforces integer window days in 1..2", () => {
-    const values = { ...defaultValues(), commit_days: "1.5", lookahead_days: "3" };
-    const errors = validate(values);
-    expect(errors.commit_days).toBe("Enter a whole number.");
-    expect(errors.lookahead_days).toMatch(/At most 2/);
+  it("sends no window scheme: every web run commits a day with the next in view", () => {
+    const request = buildRequest(defaultValues());
+    expect(Object.keys(request).sort()).toEqual(["battery", "end", "start"]);
   });
 
   it("checks the date order, the 365-day span and the bundled range", () => {

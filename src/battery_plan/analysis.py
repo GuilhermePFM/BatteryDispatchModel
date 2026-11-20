@@ -619,13 +619,20 @@ def build_result_payload(
 
 
 def _certificate(search: DualSearchResult | None, profit: float) -> dict[str, Any] | None:
-    """The cycle value, its cost in passes, and the dual bound when the method has one."""
+    """The cycle value, its cost in passes, and the dual bound when the method has one.
+
+    ``stopped_early`` says the search was cut short by its deadline rather
+    than by its own criterion; the plan is still within budget, and
+    ``plan_gap`` is then the measure of what stopping cost.
+    """
     if search is None:
         return None
     bound = search.bound
     return {
         "cycle_value": search.cycle_value,
         "passes": search.passes,
+        "stopped_early": search.stopped_early,
+        "stop_reason": search.stop_reason,
         "dual_bound_gbp": None if bound is None else _number(bound.lagrangian),
         "dual_gap": None if bound is None else _number(bound.relative_gap),
         "plan_gap": None

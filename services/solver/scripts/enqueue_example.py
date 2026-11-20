@@ -66,8 +66,6 @@ def main() -> int:
         "battery": BATTERY,
         "start": args.start,
         "end": args.end,
-        "commit_days": args.commit_days,
-        "lookahead_days": args.lookahead_days,
     }
     if args.cycle_budget is not None:
         request["cycle_budget"] = args.cycle_budget
@@ -185,8 +183,6 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--start", default="2018-01-01")
     parser.add_argument("--end", default="2018-01-03")
-    parser.add_argument("--commit-days", type=int, default=1)
-    parser.add_argument("--lookahead-days", type=int, default=1)
     parser.add_argument("--cycle-budget", type=float)
     parser.add_argument("--prices", type=Path, help="a CSV to upload (default: bundled prices)")
     parser.add_argument("--no-wait", action="store_true", help="queue it and return")

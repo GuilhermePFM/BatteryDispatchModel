@@ -23,6 +23,7 @@ from dataclasses import dataclass
 
 from battery_plan.modelling.cycle_value.oracle import (
     SPENT_TOLERANCE,
+    STOPPED_FOR_TIME,
     CycleOracle,
     DualPoint,
     DualSearchResult,
@@ -44,7 +45,8 @@ class BisectionSearch:
     ``tolerance`` is the fraction of the budget that may go unspent while the
     budget still counts as fully used. The cost is fixed at ``1 +
     max_iterations`` passes whatever the instance: one probe to find out whether
-    the budget binds at all, then a halving each pass.
+    the budget binds at all, then a halving each pass — fewer only when the
+    oracle's deadline leaves no time for the next one.
     """
 
     upper_bound: float = 200.0
@@ -108,7 +110,13 @@ class BisectionSearch:
 
         low, high = 0.0, self.upper_bound
         best_cycle_value = 0.0
+        stop_reason: str | None = None
         for _ in range(self.max_iterations):
+            # Every pass here is capped, so the best one so far is already a
+            # plan: a deadline only has to leave room for the next pass.
+            if not oracle.can_afford(1):
+                stop_reason = STOPPED_FOR_TIME
+                break
             cycle_value = 0.5 * (low + high)
             point = oracle.at(cycle_value, relaxed=False)
             if point.cycles >= spent_in_full:
@@ -120,7 +128,8 @@ class BisectionSearch:
                 cells=_cells(point, spent_in_full, bracket=(low, high)),
             )
 
-        reporter.phase("calibrate", "done", f"bracketed \u00b7 {passes_phrase(oracle.passes)}")
+        outcome = "bracketed" if stop_reason is None else "stopped for the time limit"
+        reporter.phase("calibrate", "done", f"{outcome} \u00b7 {passes_phrase(oracle.passes)}")
         reporter.search_finished(
             SearchSummary(
                 cycle_value=best_cycle_value,
@@ -138,7 +147,7 @@ class BisectionSearch:
                 ),
             )
         )
-        return _result(best_cycle_value, best, oracle)
+        return _result(best_cycle_value, best, oracle, stop_reason)
 
 
 def _cells(
@@ -163,7 +172,9 @@ def _cells(
     }
 
 
-def _result(cycle_value: float, point: DualPoint, oracle: CycleOracle) -> DualSearchResult:
+def _result(
+    cycle_value: float, point: DualPoint, oracle: CycleOracle, stop_reason: str | None = None
+) -> DualSearchResult:
     return DualSearchResult(
         cycle_value=cycle_value,
         plan=point.plan,
@@ -171,4 +182,5 @@ def _result(cycle_value: float, point: DualPoint, oracle: CycleOracle) -> DualSe
         cycles=point.cycles,
         passes=oracle.passes,
         bound=None,
+        stop_reason=stop_reason,
     )

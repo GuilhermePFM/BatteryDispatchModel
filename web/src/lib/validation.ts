@@ -72,16 +72,6 @@ export const CYCLE_BUDGET_FIELD = spec("cycle_budget", topProps.cycle_budget, {
   unit: "cycles",
   step: "1",
 });
-export const COMMIT_FIELD = spec("commit_days", topProps.commit_days, {
-  label: "Committed per window",
-  unit: "days",
-  step: "1",
-});
-export const LOOKAHEAD_FIELD = spec("lookahead_days", topProps.lookahead_days, {
-  label: "Lookahead",
-  unit: "days",
-  step: "1",
-});
 
 /** Every input as the text the user typed, so a half-typed number is not lost. */
 export interface FormValues {
@@ -89,8 +79,6 @@ export interface FormValues {
   cycle_budget: string;
   start: string;
   end: string;
-  commit_days: string;
-  lookahead_days: string;
 }
 
 export type FormErrors = Partial<Record<string, string>>;
@@ -106,8 +94,6 @@ export function defaultValues(): FormValues {
     cycle_budget: "",
     start: DEFAULT_START,
     end: DEFAULT_END,
-    commit_days: String(COMMIT_FIELD.default ?? 1),
-    lookahead_days: String(LOOKAHEAD_FIELD.default ?? 1),
   };
 }
 
@@ -121,8 +107,6 @@ export function valuesFromRequest(request: RunRequest): FormValues {
   values.cycle_budget = request.cycle_budget === undefined ? "" : String(request.cycle_budget);
   values.start = request.start ?? values.start;
   values.end = request.end ?? values.end;
-  values.commit_days = String(request.commit_days ?? values.commit_days);
-  values.lookahead_days = String(request.lookahead_days ?? values.lookahead_days);
   return values;
 }
 
@@ -207,10 +191,6 @@ export function validate(values: FormValues, file?: PriceFileInfo | null): FormE
   }
   const budget = numberError(values.cycle_budget, CYCLE_BUDGET_FIELD, true);
   if (budget) errors.cycle_budget = budget;
-  for (const field of [COMMIT_FIELD, LOOKAHEAD_FIELD]) {
-    const error = numberError(values[field.key as "commit_days" | "lookahead_days"], field);
-    if (error) errors[field.key] = error;
-  }
 
   const start = parseDay(values.start);
   const end = parseDay(values.end);
@@ -253,8 +233,6 @@ export function buildRequest(values: FormValues, pricesKey?: string): RunRequest
     battery,
     start: values.start,
     end: values.end,
-    commit_days: Number(values.commit_days),
-    lookahead_days: Number(values.lookahead_days),
   };
   if (values.cycle_budget.trim() !== "") request.cycle_budget = Number(values.cycle_budget.trim());
   if (pricesKey) request.prices_key = pricesKey;

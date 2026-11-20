@@ -90,6 +90,7 @@ def run_dispatch(
     reporter: Reporter | None = None,
     out_path: str = "",
     started: float | None = None,
+    deadline: float | None = None,
 ) -> DispatchResult:
     """Value the cycle budget over the configured horizon, and dispatch at that value.
 
@@ -98,6 +99,11 @@ def run_dispatch(
     run announces as its destination — nothing is written here. ``started`` is
     a :func:`time.perf_counter` reading from before the inputs were loaded, so
     the ``inputs`` phase and the run's total can include the loading.
+
+    ``deadline``, another :func:`time.perf_counter` reading, is when the plan
+    must be in hand. The search then stops before a pass it has no time for,
+    recovers a within-budget plan at the best cycle value so far, and says so
+    in ``search.stop_reason``. ``None``, the CLI's default, searches to the end.
     """
     started = time.perf_counter() if started is None else started
     reporter = reporter if reporter is not None else NullReporter()
@@ -146,7 +152,7 @@ def run_dispatch(
     calibrated = CalibratedPolicy(
         search=search_named(config.search), policy=policy, reporter=reporter
     )
-    oracle = calibrated.oracle_for(settlement, params)
+    oracle = calibrated.oracle_for(settlement, params, deadline=deadline)
     try:
         result = calibrated.calibrate_and_dispatch(settlement, params, oracle=oracle)
     except KeyboardInterrupt as stop:

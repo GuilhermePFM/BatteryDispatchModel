@@ -1,6 +1,6 @@
 import { DownloadSimple, FileCsv, SignIn, WarningCircle, X } from "@phosphor-icons/react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import templateUrl from "../../../contracts/examples/prices-template.csv?url";
 import { useAuth } from "../auth/AuthProvider";
 import type { Me } from "../contracts/types";
@@ -12,10 +12,8 @@ import {
   BUNDLED_END,
   BUNDLED_START,
   buildRequest,
-  COMMIT_FIELD,
   CYCLE_BUDGET_FIELD,
   defaultValues,
-  LOOKAHEAD_FIELD,
   MAX_SPAN_DAYS,
   inspectPriceCsv,
   roundTrip,
@@ -274,7 +272,7 @@ export function Run() {
             <fieldset className="group">
               <legend>Horizon and planning</legend>
               <p className="group-note">
-                The plan is made a window at a time: it commits the first days and looks further ahead before moving on. At most {MAX_SPAN_DAYS} days per run.
+                Each day is planned with the next day in view (<Link to="/methodology#how-much-foresight-is-enough">why one day is enough</Link>). At most {MAX_SPAN_DAYS} days per run.
               </p>
               <div className="fields">
                 <div className="field">
@@ -293,8 +291,6 @@ export function Run() {
                   <input id="f-end" type="date" value={values.end} min={dateMin} max={dateMax} onChange={onChangeDate("end")} aria-invalid={shown.end ? true : undefined} />
                   {shown.end ? <span className="error-text">{shown.end}</span> : <span className="help">{span ? `${num(span)} days.` : `Up to ${day(dateMax)}.`}</span>}
                 </div>
-                <NumberField field={COMMIT_FIELD} name="commit_days" value={values.commit_days} error={shown.commit_days} onChange={(v) => setValues((s) => ({ ...s, commit_days: v }))} />
-                <NumberField field={LOOKAHEAD_FIELD} name="lookahead_days" value={values.lookahead_days} error={shown.lookahead_days} onChange={(v) => setValues((s) => ({ ...s, lookahead_days: v }))} />
                 <NumberField
                   field={CYCLE_BUDGET_FIELD}
                   name="cycle_budget"

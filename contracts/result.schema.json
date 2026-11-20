@@ -182,7 +182,7 @@
       "description": "battery_plan.modelling.plan.summarise, plus idle periods, profit per cycle and degradation in percent of volume. Net revenues per market are net of what was bought there, so one is usually negative."
     },
     "certificate": {
-      "description": "The cycle-value search behind the plan; null when the payload was built from a plan alone. The dual bound is an upper bound on profit; plan_gap is how far below it the plan landed.",
+      "description": "The cycle-value search behind the plan; null when the payload was built from a plan alone. The dual bound is an upper bound on profit; plan_gap is how far below it the plan landed. stopped_early: the search stopped before converging because the time limit left no room for another pass; the plan is still within budget.",
       "oneOf": [
         {
           "type": "null"
@@ -193,6 +193,8 @@
           "required": [
             "cycle_value",
             "passes",
+            "stopped_early",
+            "stop_reason",
             "dual_bound_gbp",
             "dual_gap",
             "plan_gap"
@@ -204,6 +206,13 @@
             "passes": {
               "type": "integer",
               "minimum": 1
+            },
+            "stopped_early": {
+              "type": "boolean"
+            },
+            "stop_reason": {
+              "description": "Why the search stopped early; null when it did not.",
+              "enum": [null, "time_limit"]
             },
             "dual_bound_gbp": {
               "$ref": "#/$defs/nullable_number"

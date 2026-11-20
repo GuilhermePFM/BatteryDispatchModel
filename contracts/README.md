@@ -15,7 +15,7 @@ flowchart LR
 
 | Schema | What it is | Written by | Read by |
 | --- | --- | --- | --- |
-| [`run-request.schema.json`](run-request.schema.json) | Body of `POST /api/runs`: the battery, the dates, the window scheme, and optionally an uploaded price file | browser | API, solver |
+| [`run-request.schema.json`](run-request.schema.json) | Body of `POST /api/runs`: the battery, the dates, and optionally a cycle budget and an uploaded price file | browser | API, solver |
 | [`job-message.schema.json`](job-message.schema.json) | The SQS message for one run: `run_id`, `params_hash`, the validated request, where the prices are, the user's `sub` | API | solver |
 | [`run-record.schema.json`](run-record.schema.json) | The run as stored in DynamoDB and returned by the API: status, progress, error, timestamps, result, the plan CSV's S3 key | API, solver | API |
 | [`result.schema.json`](result.schema.json) | Exactly what `battery_plan.analysis.build_result_payload` returns: headline figures and the series the results page draws | solver | browser |
@@ -49,12 +49,17 @@ carry its units, so the solver builds the spec with `BatterySpec(**battery)`
 | `battery.fixed_opex_gbp_per_year` | GBP/year | 0 | 10⁸ | 5,000 |
 | `cycle_budget` *(optional)* | cycles over the run's horizon | 1 | 100,000 | absent → `lifetime_cycles` |
 | `start`, `end` | `YYYY-MM-DD`, `end` inclusive of its whole day | | | |
-| `commit_days`, `lookahead_days` | integer days | 1 | 2 | 1, 1 |
 | `prices_key` *(optional)* | S3 key of an uploaded CSV | | | absent → bundled 2018–2020 |
 
 All battery fields are required; the schema's `default`s are what the form
 should pre-fill, not values either side fills in. There is no `search` field:
-every web run uses cutting planes. Optional fields are **omitted, never
+every web run uses cutting planes. There is no window scheme either: every
+web run commits one day at a time with the next day in view
+(`battery_plan.contracts.config_from_request`). §6 of
+[`docs/model/model.md`](../docs/model/model.md), "How much foresight is
+enough", shows that longer lookahead or longer commits add nothing on this
+data. A request that carries `commit_days` or `lookahead_days` is rejected
+like any other unknown field. Optional fields are **omitted, never
 `null`**.
 
 Rules the schema cannot state, which the API checks before queueing:
@@ -108,8 +113,9 @@ plus `updated_at`:
 | `elapsed` | seconds since the run started |
 | `done` | the run has finished |
 
-The callback fires once per solved window, so the solver should throttle its
-writes (every few seconds, plus the final one).
+The callback fires once per solved window, so the solver throttles its
+writes: at once on the first event and on each new phase or pass, otherwise
+every few seconds, plus the final one.
 
 On a run whose cycle budget does not bind — the full 5,000-cycle life on any
 year of the bundled data — the search is one pass, and `fraction` climbs to 0.5
@@ -134,6 +140,17 @@ for drawing. Timestamps are on the price data's own clock and carry no offset.
 | `series.spread_histogram` | periods by Market 2 less Market 1 |
 | `series.net_power` | the heatmap: a row of 48 half hours per day, to 0.1 MW |
 | `series.week` | seven days at half-hourly resolution, the median-profit run of seven |
+
+`certificate` describes the search behind the plan. `passes` counts the passes
+spent. `dual_bound_gbp` is the weak-duality bound on profit, and `dual_gap` is
+how far the search's two bounds were apart when it stopped: that measures the
+search's convergence. `plan_gap` is how far the delivered plan's profit falls
+below the bound: that measures the plan. A run given a deadline (every web
+run; see `services/solver/README.md`) can end with `stopped_early: true` and
+`stop_reason: "time_limit"`. That means the search stopped before converging
+because the time left could not cover another pass plus the recovery pass.
+The plan is still within budget, and `plan_gap` says how far from the bound it
+may be. Otherwise `stopped_early` is `false` and `stop_reason` is `null`.
 
 Measured size, as compact JSON (`separators=(",", ":")`, 1 KB = 1000 bytes):
 106 KB for 2019 (132 KB with `json.dumps`' default spacing), 99 KB for the
@@ -177,5 +194,5 @@ the canonical string, and the expected hash:
 
 | Vector | `params_hash` |
 | --- | --- |
-| bundled prices, `run-request.example.json` | `029e15ead221a01ee217cb4ded0f5f8a9be3298f6df5ad6fe003b4e9af85fba6` |
-| uploaded `prices-template.csv`, with `prices_key` and `cycle_budget` | `48b6e4df15df24f7495e3df7e71a937058bf45dd014bc03f1893ad0d5a93ba2e` |
+| bundled prices, `run-request.example.json` | `42b8449a308cbe544c9edefe454778d553e6dc1ea369a60b7a5dfabf51a1c774` |
+| uploaded `prices-template.csv`, with `prices_key` and `cycle_budget` | `b1df5f5a39fae76916b2e0196a1ca265745236e4100f56d16f8645f039954da8` |

@@ -7,7 +7,10 @@ written to the run every few seconds, and the run ends one of three ways
 (``contracts/platform.md``, "Finishing a run"):
 
 * solved: the plan CSV goes to ``plans/<run_id>.csv`` and the run is
-  ``succeeded`` with ``result_json``, the result payload as compact JSON;
+  ``succeeded`` with ``result_json``, the result payload as compact JSON. The
+  solve is given the invocation's remaining time less :data:`FINISH_MARGIN`,
+  so a slow search stops early with a within-budget plan, and says so in the
+  payload's certificate, rather than being killed by the Lambda timeout;
 * the user's mistake — a price file :func:`load_market_prices_csv` rejects, or
   dates outside the prices — the run is ``failed`` and its quota refunded, and
   the handler returns normally so the message is not retried;
@@ -63,6 +66,9 @@ PRICES_XLSX = Path(os.environ.get("PRICES_XLSX", MARKET_PRICES_XLSX))
 
 #: Seconds between progress writes: the callback fires once per solved window.
 PROGRESS_INTERVAL = 3.0
+#: Seconds of the invocation kept back from the solve for what follows it:
+#: building the payload, the plan CSV to S3, the success write.
+FINISH_MARGIN = 45.0
 #: Tries at the fail-and-refund transaction while concurrent writes cancel it.
 _FAIL_ATTEMPTS = 10
 
@@ -72,11 +78,27 @@ _serialize = TypeSerializer().serialize
 def handler(event: dict[str, Any], context: object = None) -> None:
     """Lambda entry point for an SQS event."""
     for record in event["Records"]:
-        process(json.loads(record["body"]))
+        process(json.loads(record["body"]), deadline=_deadline(context))
 
 
-def process(message: dict[str, Any]) -> None:
-    """Run one job message to the end, as ``contracts/platform.md`` lays out."""
+def _deadline(context: object) -> float | None:
+    """The :func:`time.perf_counter` reading the solve must end by, from Lambda's clock.
+
+    The invocation's remaining time less :data:`FINISH_MARGIN` for the writes
+    after the solve; ``None`` without a Lambda context (a test, a script).
+    """
+    remaining = getattr(context, "get_remaining_time_in_millis", None)
+    if remaining is None:
+        return None
+    return time.perf_counter() + float(remaining()) / 1000.0 - FINISH_MARGIN
+
+
+def process(message: dict[str, Any], deadline: float | None = None) -> None:
+    """Run one job message to the end, as ``contracts/platform.md`` lays out.
+
+    ``deadline`` (a :func:`time.perf_counter` reading) is when the dispatch
+    must hand back its plan; a search that would run past it stops early.
+    """
     _validator().validate(message)
     run_id, request = message["run_id"], message["request"]
     run = _start(run_id)
@@ -97,7 +119,9 @@ def process(message: dict[str, Any]) -> None:
 
     progress = _Progress(run_id)
     spec = spec_from_request(request)
-    solved = run_dispatch(spec, prices, config_from_request(request), progress)
+    solved = run_dispatch(spec, prices, config_from_request(request), progress, deadline=deadline)
+    if solved.search.stopped_early:
+        log.info("run %s stopped early after %d passes", run_id, solved.search.passes)
     result = build_result_payload(solved.plan, spec, solved.params, solved.search)
 
     plan_key = f"plans/{run_id}.csv"
@@ -214,21 +238,30 @@ def _fail(run: dict[str, Any], code: str, message: str) -> None:
 
 
 class _Progress:
-    """The ``on_progress`` callback: keeps the latest event, writes it every few seconds.
+    """The ``on_progress`` callback: keeps the latest event and writes it to the run.
 
-    The final event is not written here: it goes out with the success itself.
+    The first event, and any that moves to a new phase or pass, is written at
+    once, so the run page shows where the run is from its first second and a
+    short run still shows its passes; the window-by-window events in between
+    are throttled to one write every :data:`PROGRESS_INTERVAL` seconds. The
+    final event is not written here: it goes out with the success itself.
     """
 
     def __init__(self, run_id: str) -> None:
         self.run_id = run_id
         self.latest: ProgressEvent | None = None
+        self.written_event: ProgressEvent | None = None
         self.written = time.monotonic()
 
     def __call__(self, event: ProgressEvent) -> None:
         self.latest = event
-        if event.done or time.monotonic() - self.written < PROGRESS_INTERVAL:
+        if event.done:
             return
-        self.written = time.monotonic()
+        last = self.written_event
+        moved = last is None or (last.phase, last.pass_index) != (event.phase, event.pass_index)
+        if not moved and time.monotonic() - self.written < PROGRESS_INTERVAL:
+            return
+        self.written, self.written_event = time.monotonic(), event
         now = _now()
         _update(
             self.run_id,

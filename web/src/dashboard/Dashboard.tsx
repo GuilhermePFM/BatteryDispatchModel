@@ -67,9 +67,11 @@ function Headline({ r }: { r: Result }) {
               k="Cycle value λ"
               v={`£${num(cert.cycle_value, 2)}`}
               n={
-                binding
-                  ? `${cert.passes} passes, dual gap ${isNum(cert.dual_gap) ? pct(cert.dual_gap, 2) : "n/a"}`
-                  : `budget not binding, ${cert.passes} pass${cert.passes === 1 ? "" : "es"}`
+                cert.stopped_early
+                  ? `stopped early, after ${cert.passes} pass${cert.passes === 1 ? "" : "es"}`
+                  : binding
+                    ? `${cert.passes} passes, search converged to a ${isNum(cert.dual_gap) ? pct(cert.dual_gap, 2) : "n/a"} dual gap`
+                    : `budget not binding, ${cert.passes} pass${cert.passes === 1 ? "" : "es"}`
               }
             />
           ) : (
@@ -89,6 +91,12 @@ function Headline({ r }: { r: Result }) {
             </span>
           ))
         )}
+        {cert?.stopped_early ? (
+          <span className="bad">
+            <WarningCircle size={18} weight="bold" aria-hidden="true" /> Stopped after {cert.passes} pass{cert.passes === 1 ? "" : "es"} to stay within the time limit
+            {isNum(cert.plan_gap) ? `; the plan is within ${pct(cert.plan_gap, 2)} of the best possible.` : "; the plan is within budget."}
+          </span>
+        ) : null}
         {cert && isNum(cert.dual_bound_gbp) ? (
           <span>
             Dual bound {gbp(cert.dual_bound_gbp)}: the plan is within {pct(cert.plan_gap, 2)} of it.

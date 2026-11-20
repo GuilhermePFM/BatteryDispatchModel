@@ -8,7 +8,9 @@ the success record, the refund on a user error, and the raise on anything else.
 
 from __future__ import annotations
 
+import dataclasses
 import json
+import time
 from collections.abc import Iterator
 from typing import Any
 
@@ -19,6 +21,7 @@ from moto import mock_aws
 
 import handler
 from battery_plan.data_io.paths import PROJECT_ROOT
+from battery_plan.dispatch import run_dispatch
 from battery_plan.reporting import ProgressEvent
 
 TABLE = "batteryplan"
@@ -214,20 +217,58 @@ def test_an_unexpected_error_raises_and_leaves_the_run_to_the_dlq(
     assert _item(aws, f"hash#{HASH}") is not None
 
 
-def test_progress_is_written_at_most_every_few_seconds(
+def test_progress_is_written_at_once_on_a_new_pass_and_otherwise_every_few_seconds(
     aws: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _queue(aws)
-    writes: list[str] = []
+    writes: list[int] = []
     monkeypatch.setattr(
-        handler, "_update", lambda run_id, expression, **values: writes.append(expression)
+        handler,
+        "_update",
+        lambda run_id, expression, **values: writes.append(values["progress"]["pass_index"]),
     )
     progress = handler._Progress(RUN_ID)
     event = ProgressEvent("calibrate", 1, None, 20, 0.5, 0.25, 0.0, 1.0)
     for _ in range(1000):
         progress(event)
-    assert writes == []
+    assert writes == [1]  # the first event at once, the window-by-window ones held back
+
+    progress(dataclasses.replace(event, pass_index=2))
+    progress(dataclasses.replace(event, phase="recover", pass_index=2))
+    assert writes == [1, 2, 2]
 
     monkeypatch.setattr(handler, "PROGRESS_INTERVAL", 0.0)
-    progress(event)
-    assert len(writes) == 1
+    progress(dataclasses.replace(event, phase="recover", pass_index=2))
+    assert writes == [1, 2, 2, 2]
+
+
+class _Context:
+    def get_remaining_time_in_millis(self) -> int:
+        return 300_000
+
+
+def test_the_solve_gets_the_invocation_time_left_less_the_finishing_margin(
+    aws: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    deadlines: list[float | None] = []
+
+    def recording(*args: Any, deadline: float | None = None, **kwargs: Any) -> Any:
+        deadlines.append(deadline)
+        return run_dispatch(*args, deadline=deadline, **kwargs)
+
+    monkeypatch.setattr(handler, "run_dispatch", recording)
+    _queue(aws)
+    before = time.perf_counter()
+    handler.handler(_event(_message()), _Context())
+
+    (deadline,) = deadlines
+    assert deadline is not None
+    expected = before + 300.0 - handler.FINISH_MARGIN
+    assert expected <= deadline <= expected + 5.0
+    run = _item(aws, f"run#{RUN_ID}")
+    assert run is not None and run["status"]["S"] == "succeeded"
+    assert json.loads(run["result_json"]["S"])["certificate"]["stopped_early"] is False
+
+
+def test_no_lambda_context_means_no_deadline() -> None:
+    assert handler._deadline(None) is None

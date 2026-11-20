@@ -43,15 +43,26 @@ class CalibratedPolicy:
         settlement = build_periods(prices)
         return self.calibrate_and_dispatch(settlement, ModelParameters.from_spec(spec)).plan
 
-    def oracle_for(self, settlement: SettlementPeriods, params: ModelParameters) -> CycleOracle:
+    def oracle_for(
+        self,
+        settlement: SettlementPeriods,
+        params: ModelParameters,
+        *,
+        deadline: float | None = None,
+    ) -> CycleOracle:
         """The oracle this policy would spend passes on.
 
         Handing it out is what lets a caller survive an interruption: the
         oracle holds every pass solved so far, so a run stopped halfway still
-        has a best plan to write.
+        has a best plan to write. ``deadline`` is a :func:`time.perf_counter`
+        reading the search should finish by (:meth:`CycleOracle.can_afford`).
         """
         return CycleOracle(
-            settlement=settlement, params=params, policy=self.policy, reporter=self.reporter
+            settlement=settlement,
+            params=params,
+            policy=self.policy,
+            reporter=self.reporter,
+            deadline=deadline,
         )
 
     def calibrate_and_dispatch(

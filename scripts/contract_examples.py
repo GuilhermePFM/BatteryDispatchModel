@@ -64,8 +64,6 @@ REQUEST: dict[str, Any] = {
     },
     "start": "2018-01-01",
     "end": "2018-01-03",
-    "commit_days": 1,
-    "lookahead_days": 1,
 }
 
 #: A second request for the hash vectors, exercising what the first does not:
@@ -78,7 +76,6 @@ UPLOAD_REQUEST: dict[str, Any] = {
     "cycle_budget": 4.5,
     "start": "2018-01-08",
     "end": "2018-01-14",
-    "lookahead_days": 2,
 }
 
 

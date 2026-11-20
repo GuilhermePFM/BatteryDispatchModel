@@ -8,18 +8,36 @@ once the handler returns. A raised error leaves the message to the redrive
 policy (``maxReceiveCount = 1``); rather than wait out the visibility timeout,
 the worker makes it visible again at once, so the next receive moves it to the
 DLQ straight away.
+
+Each message gets a synthetic Lambda context whose clock starts at receipt
+and runs out after ``SOLVER_TIMEOUT_SECONDS`` (default 600, the deployed
+function's timeout), so a slow run stops early here as it would on AWS.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import time
 
 import boto3
 
 import handler
 
 log = logging.getLogger("solver.local")
+
+#: The invocation timeout the synthetic context counts down from, seconds.
+TIMEOUT_SECONDS = float(os.environ.get("SOLVER_TIMEOUT_SECONDS", "600"))
+
+
+class _Context:
+    """The one part of Lambda's context object the handler reads."""
+
+    def __init__(self, timeout: float) -> None:
+        self.ends = time.monotonic() + timeout
+
+    def get_remaining_time_in_millis(self) -> int:
+        return max(0, int(1000 * (self.ends - time.monotonic())))
 
 
 def main() -> None:
@@ -40,7 +58,7 @@ def main() -> None:
         for message in reply.get("Messages", []):
             event = {"Records": [_record(message, queue_arn, sqs.meta.region_name)]}
             try:
-                handler.handler(event)
+                handler.handler(event, _Context(TIMEOUT_SECONDS))
             except Exception:
                 log.exception(
                     "message %s failed: leaving it to the redrive policy", message["MessageId"]

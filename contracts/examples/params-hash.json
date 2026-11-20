@@ -16,13 +16,11 @@
           "fixed_opex_gbp_per_year": 5000
         },
         "start": "2018-01-01",
-        "end": "2018-01-03",
-        "commit_days": 1,
-        "lookahead_days": 1
+        "end": "2018-01-03"
       },
       "prices_sha256": "f26dc09b7eb4bcb3755b615c0595132937dee3dbb4b82e915648be7e53a95ce9",
-      "canonical": "{\"prices_sha256\":\"f26dc09b7eb4bcb3755b615c0595132937dee3dbb4b82e915648be7e53a95ce9\",\"request\":{\"battery\":{\"capex_gbp\":500000,\"charging_loss_fraction\":0.05,\"degradation_pct_per_cycle\":0.001,\"discharging_loss_fraction\":0.05,\"fixed_opex_gbp_per_year\":5000,\"lifetime_cycles\":5000,\"lifetime_years\":10,\"max_charge_rate_mw\":2,\"max_discharge_rate_mw\":2,\"max_storage_volume_mwh\":4},\"commit_days\":1,\"end\":\"2018-01-03\",\"lookahead_days\":1,\"start\":\"2018-01-01\"}}",
-      "params_hash": "029e15ead221a01ee217cb4ded0f5f8a9be3298f6df5ad6fe003b4e9af85fba6"
+      "canonical": "{\"prices_sha256\":\"f26dc09b7eb4bcb3755b615c0595132937dee3dbb4b82e915648be7e53a95ce9\",\"request\":{\"battery\":{\"capex_gbp\":500000,\"charging_loss_fraction\":0.05,\"degradation_pct_per_cycle\":0.001,\"discharging_loss_fraction\":0.05,\"fixed_opex_gbp_per_year\":5000,\"lifetime_cycles\":5000,\"lifetime_years\":10,\"max_charge_rate_mw\":2,\"max_discharge_rate_mw\":2,\"max_storage_volume_mwh\":4},\"end\":\"2018-01-03\",\"start\":\"2018-01-01\"}}",
+      "params_hash": "42b8449a308cbe544c9edefe454778d553e6dc1ea369a60b7a5dfabf51a1c774"
     },
     {
       "name": "uploaded prices: prices_key is left out, the file's sha256 stands in",
@@ -41,14 +39,12 @@
         },
         "start": "2018-01-08",
         "end": "2018-01-14",
-        "commit_days": 1,
-        "lookahead_days": 2,
         "cycle_budget": 4.5,
         "prices_key": "uploads/5f347c467342c06fe6c15dcf371d68c1e3983ad0282854a6fb17890e0a8262f1.csv"
       },
       "prices_sha256": "5f347c467342c06fe6c15dcf371d68c1e3983ad0282854a6fb17890e0a8262f1",
-      "canonical": "{\"prices_sha256\":\"5f347c467342c06fe6c15dcf371d68c1e3983ad0282854a6fb17890e0a8262f1\",\"request\":{\"battery\":{\"capex_gbp\":500000,\"charging_loss_fraction\":0.05,\"degradation_pct_per_cycle\":0.000005,\"discharging_loss_fraction\":0.05,\"fixed_opex_gbp_per_year\":5000,\"lifetime_cycles\":5000,\"lifetime_years\":10,\"max_charge_rate_mw\":2,\"max_discharge_rate_mw\":2,\"max_storage_volume_mwh\":4},\"commit_days\":1,\"cycle_budget\":4.5,\"end\":\"2018-01-14\",\"lookahead_days\":2,\"start\":\"2018-01-08\"}}",
-      "params_hash": "48b6e4df15df24f7495e3df7e71a937058bf45dd014bc03f1893ad0d5a93ba2e"
+      "canonical": "{\"prices_sha256\":\"5f347c467342c06fe6c15dcf371d68c1e3983ad0282854a6fb17890e0a8262f1\",\"request\":{\"battery\":{\"capex_gbp\":500000,\"charging_loss_fraction\":0.05,\"degradation_pct_per_cycle\":0.000005,\"discharging_loss_fraction\":0.05,\"fixed_opex_gbp_per_year\":5000,\"lifetime_cycles\":5000,\"lifetime_years\":10,\"max_charge_rate_mw\":2,\"max_discharge_rate_mw\":2,\"max_storage_volume_mwh\":4},\"cycle_budget\":4.5,\"end\":\"2018-01-14\",\"start\":\"2018-01-08\"}}",
+      "params_hash": "b1df5f5a39fae76916b2e0196a1ca265745236e4100f56d16f8645f039954da8"
     }
   ]
 }

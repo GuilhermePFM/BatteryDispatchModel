@@ -22,8 +22,6 @@ export interface RunRequest {
   cycle_budget?: number;
   start: string;
   end: string;
-  commit_days: number;
-  lookahead_days: number;
   prices_key?: string;
 }
 
@@ -122,6 +120,8 @@ export interface Result {
   certificate: Nullable<{
     cycle_value: number;
     passes: number;
+    stopped_early: boolean;
+    stop_reason: Nullable<"time_limit">;
     dual_bound_gbp: Nullable<number>;
     dual_gap: Nullable<number>;
     plan_gap: Nullable<number>;

@@ -63,8 +63,6 @@ REQUEST: dict[str, Any] = {
     },
     "start": "2018-01-01",
     "end": "2020-12-31",
-    "commit_days": 1,
-    "lookahead_days": 1,
 }
 
 

@@ -40,6 +40,8 @@
   "certificate": {
     "cycle_value": 0.0,
     "passes": 1,
+    "stopped_early": false,
+    "stop_reason": null,
     "dual_bound_gbp": 480.9656151521849,
     "dual_gap": 0.0,
     "plan_gap": 0.0

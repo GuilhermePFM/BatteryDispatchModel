@@ -109,7 +109,7 @@ func TestExamplesValidate(t *testing.T) {
 const example = `{"battery":{"max_charge_rate_mw":2,"max_discharge_rate_mw":2,"max_storage_volume_mwh":4,
 "charging_loss_fraction":0.05,"discharging_loss_fraction":0.05,"lifetime_years":10,"lifetime_cycles":5000,
 "degradation_pct_per_cycle":0.001,"capex_gbp":500000,"fixed_opex_gbp_per_year":5000},
-"start":"2018-01-01","end":"2018-01-03","commit_days":1,"lookahead_days":1}`
+"start":"2018-01-01","end":"2018-01-03"}`
 
 // with replaces top-level fields of the example; a nil value removes one.
 func with(t *testing.T, changes map[string]any) []byte {
@@ -146,12 +146,13 @@ func TestParseRequest(t *testing.T) {
 		{"upload outside the bundled years", with(t, map[string]any{"start": "2023-01-01", "end": "2023-12-31", "prices_key": "uploads/x.csv"}), ""},
 		{"a full leap year", with(t, map[string]any{"start": "2020-01-01", "end": "2020-12-31"}), ""},
 		{"not JSON", []byte("{"), "not valid JSON"},
-		{"missing field", with(t, map[string]any{"commit_days": nil}), "commit_days"},
+		{"missing field", with(t, map[string]any{"end": nil}), "end"},
 		{"unknown field", with(t, map[string]any{"search": "bisection"}), "search"},
 		{"null optional", []byte(strings.Replace(example, `"start"`, `"cycle_budget":null,"start"`, 1)), "cycle_budget"},
 		{"over maximum", with(t, map[string]any{"battery": battery("max_charge_rate_mw", 101)}), "battery.max_charge_rate_mw"},
 		{"string number", with(t, map[string]any{"battery": battery("capex_gbp", "1")}), "battery.capex_gbp"},
-		{"fractional days", with(t, map[string]any{"commit_days": 1.5}), "commit_days"},
+		{"window scheme is fixed", with(t, map[string]any{"commit_days": 1}), "commit_days"},
+		{"lookahead is fixed", with(t, map[string]any{"lookahead_days": 2}), "lookahead_days"},
 		{"bad date", with(t, map[string]any{"start": "2018-02-30"}), "start"},
 		{"end before start", with(t, map[string]any{"end": "2017-12-31"}), "before start"},
 		{"over a year", with(t, map[string]any{"start": "2018-01-01", "end": "2019-01-02"}), "at most 365"},

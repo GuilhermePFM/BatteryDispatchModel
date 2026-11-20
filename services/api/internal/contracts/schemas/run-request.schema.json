@@ -2,10 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://batteryplan.invalid/contracts/run-request.schema.json",
   "title": "Run request",
-  "description": "Body of POST /api/runs. The battery fields are named after battery_plan.data_models.BatterySpec and carry its units. Rules a schema cannot state are in contracts/README.md: start <= end, end - start <= 365 days, and the dates inside the price data.",
+  "description": "Body of POST /api/runs. The battery fields are named after battery_plan.data_models.BatterySpec and carry its units. Rules a schema cannot state are in contracts/README.md: start <= end, end - start <= 365 days, and the dates inside the price data. There is no window-scheme field: every web run commits one day at a time with the next day in view.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["battery", "start", "end", "commit_days", "lookahead_days"],
+  "required": ["battery", "start", "end"],
   "properties": {
     "battery": {
       "type": "object",
@@ -112,20 +112,6 @@
       "type": "string",
       "format": "date",
       "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
-    },
-    "commit_days": {
-      "description": "Days committed per solved window.",
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 2,
-      "default": 1
-    },
-    "lookahead_days": {
-      "description": "Days of foresight beyond the committed part, solved and then discarded.",
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 2,
-      "default": 1
     },
     "prices_key": {
       "description": "S3 key of an uploaded price CSV (contracts/examples/prices-template.csv shows the format). Absent: the bundled 2018-2020 prices. Omit rather than send null.",
