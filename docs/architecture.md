@@ -8,6 +8,22 @@
 
 ---
 
+> **Scope.** This document is the Python package, `src/battery_plan/`. The web
+> platform built around it — the Go API and DLQ handler, the solver Lambda, the
+> React site, the AWS stack — is drawn in the [README](../README.md#architecture),
+> with the reasons for each choice under
+> [Why it's built this way](../README.md#why-its-built-this-way). Its rules live
+> next to the code: [`contracts/platform.md`](../contracts/platform.md) (storage,
+> routes, quotas, refunds, the local stack),
+> [`contracts/README.md`](../contracts/README.md) (the schemas),
+> [`services/api`](../services/api/README.md),
+> [`services/solver`](../services/solver/README.md), [`web`](../web/README.md) and
+> [`deploy.md`](deploy.md). The package meets the platform at one function,
+> `run_dispatch` in `dispatch.py`, which the CLI and the solver Lambda both call
+> (the Lambda with a deadline, so the cycle-value search stops early rather than
+> time out), and at `analysis.py` and `contracts.py` below; `contracts.py` fixes
+> web runs at one committed day with one day of lookahead.
+
 ## 1. One organizing idea: code <-> methodology parity
 
 The formulation lives in [`model/model.md`](model/model.md) as numbered sections. Every module under `modelling/` owns a contiguous range of those sections and says so in its first line, so a reviewer reading §4.5 can open exactly one file and find exactly one implementation of it. The filing principle is the paragraphs the code is answerable to, rather than the usual "models, services, utils".
