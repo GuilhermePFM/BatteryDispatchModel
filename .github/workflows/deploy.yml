@@ -27,16 +27,16 @@ jobs:
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: aws-actions/configure-aws-credentials@v5
+      - uses: actions/checkout@v7
+      - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
       - id: ecr
         uses: aws-actions/amazon-ecr-login@v2
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
       - id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: services/solver/Dockerfile
@@ -55,13 +55,13 @@ jobs:
   api-zips:
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v5
-      - uses: jdx/mise-action@v2
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
         with:
           install_args: go
       - run: make zips
         working-directory: services/api
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: api-zips
           path: services/api/dist/*.zip
@@ -74,47 +74,58 @@ jobs:
     env:
       TF_IN_AUTOMATION: "1"
       TF_INPUT: "0"
-      TF_VAR_solver_image_digest: ${{ needs.solver-image.outputs.digest }}
-      TF_VAR_api_zip: ${{ github.workspace }}/services/api/dist/api.zip
-      TF_VAR_dlq_zip: ${{ github.workspace }}/services/api/dist/dlq.zip
-      TF_VAR_google_client_id: ${{ vars.GOOGLE_CLIENT_ID }}
-      TF_VAR_google_client_secret: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-      TF_VAR_linkedin_client_id: ${{ vars.LINKEDIN_CLIENT_ID }}
-      TF_VAR_linkedin_client_secret: ${{ secrets.LINKEDIN_CLIENT_SECRET }}
-      TF_VAR_linkedin_oidc_issuer: ${{ vars.LINKEDIN_OIDC_ISSUER || 'https://www.linkedin.com/oauth' }}
-      TF_VAR_budget_email: ${{ secrets.BUDGET_EMAIL }}
-      # Phase 6, all optional (docs/deploy.md, "Custom domain").
-      TF_VAR_site_domain: ${{ vars.SITE_DOMAIN }}
-      TF_VAR_site_domain_attach: ${{ vars.SITE_DOMAIN_ATTACH || 'false' }}
-      TF_VAR_auth_domain: ${{ vars.AUTH_DOMAIN }}
-      TF_VAR_auth_domain_attach: ${{ vars.AUTH_DOMAIN_ATTACH || 'false' }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v5
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           name: api-zips
           path: services/api/dist
-      - uses: jdx/mise-action@v2
+      - uses: jdx/mise-action@v5
         with:
           install_args: terraform node pnpm
-      - uses: aws-actions/configure-aws-credentials@v5
+      - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: terraform apply
         working-directory: infra/aws
+        # The inputs, secrets among them, only where Terraform reads them: the
+        # later steps run pnpm install and the build.
+        env:
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+          TF_VAR_solver_image_digest: ${{ needs.solver-image.outputs.digest }}
+          TF_VAR_api_zip: ${{ github.workspace }}/services/api/dist/api.zip
+          TF_VAR_dlq_zip: ${{ github.workspace }}/services/api/dist/dlq.zip
+          TF_VAR_google_client_id: ${{ vars.GOOGLE_CLIENT_ID }}
+          TF_VAR_google_client_secret: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          TF_VAR_linkedin_client_id: ${{ vars.LINKEDIN_CLIENT_ID }}
+          TF_VAR_linkedin_client_secret: ${{ secrets.LINKEDIN_CLIENT_SECRET }}
+          TF_VAR_linkedin_oidc_issuer: ${{ vars.LINKEDIN_OIDC_ISSUER || 'https://www.linkedin.com/oauth' }}
+          TF_VAR_budget_email: ${{ secrets.BUDGET_EMAIL }}
+          # Phase 6, all optional (docs/deploy.md, "Custom domain").
+          TF_VAR_site_domain: ${{ vars.SITE_DOMAIN }}
+          TF_VAR_site_domain_attach: ${{ vars.SITE_DOMAIN_ATTACH || 'false' }}
+          TF_VAR_auth_domain: ${{ vars.AUTH_DOMAIN }}
+          TF_VAR_auth_domain_attach: ${{ vars.AUTH_DOMAIN_ATTACH || 'false' }}
         run: |
-          terraform init -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
+          terraform init -backend-config="bucket=$TF_STATE_BUCKET"
           terraform apply -auto-approve
 
       - name: read stack outputs
         working-directory: infra/aws
         run: |
-          terraform output -json vite_env | jq -r 'to_entries[] | "\(.key)=\(.value)"' >> "$GITHUB_ENV"
-          echo "SITE_BUCKET=$(terraform output -raw site_bucket)" >> "$GITHUB_ENV"
-          echo "DISTRIBUTION_ID=$(terraform output -raw distribution_id)" >> "$GITHUB_ENV"
-          echo "SITE_URL=$(terraform output -raw site_url)" >> "$GITHUB_ENV"
+          # Assignments, not $(...) inside echo, so a failed read fails the step.
+          vite_env=$(terraform output -json vite_env | jq -r 'to_entries[] | "\(.key)=\(.value)"')
+          site_bucket=$(terraform output -raw site_bucket)
+          distribution_id=$(terraform output -raw distribution_id)
+          site_url=$(terraform output -raw site_url)
+          {
+            echo "$vite_env"
+            echo "SITE_BUCKET=$site_bucket"
+            echo "DISTRIBUTION_ID=$distribution_id"
+            echo "SITE_URL=$site_url"
+          } >> "$GITHUB_ENV"
 
       - name: build the SPA
         working-directory: web
