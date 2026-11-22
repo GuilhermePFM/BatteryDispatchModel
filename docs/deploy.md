@@ -4,12 +4,11 @@ The stack of [`contracts/platform.md`](../contracts/platform.md), in `us-east-1`
 one CloudFront distribution (the SPA from a private S3 bucket, `/api/*` to the
 Go API's Lambda Function URL, both through origin access control), the solver
 Lambda (container image) fed by SQS with a DLQ and its Go handler, one DynamoDB
-table, one data bucket, Cognito with Google and LinkedIn, and a US$ 5 budget
-alert.
+table, one data bucket, Cognito with Google, and a US$ 5 budget alert.
 
 | Path | What |
 | --- | --- |
-| `infra/bootstrap/` | Applied once, by you: state bucket, GitHub OIDC provider, deploy role, the solver's ECR repository |
+| `infra/bootstrap/` | Applied by you: state bucket, GitHub OIDC provider, deploy role and its boundary, the solver's ECR repository, CloudTrail, GuardDuty |
 | `infra/aws/` | Everything else, applied by `.github/workflows/deploy.yml` on every push to `main` |
 | `.github/workflows/ci.yml` | Python, Go, web and Terraform checks on pull requests and pushes |
 
@@ -22,8 +21,8 @@ alert.
 - Lambda's account concurrency quota. New accounts sometimes get 10 concurrent
   executions, which leaves nothing for the API's reserved 10. Check *Service
   Quotas → AWS Lambda → Concurrent executions*; ask for 1000 (free, usually
-  granted within a day), or deploy with `TF_VAR_api_reserved_concurrency=-1`
-  meanwhile.
+  granted within a day). The workflow deploys the API unreserved until you set
+  the GitHub variable `API_RESERVED_CONCURRENCY=10`, which needs the higher quota.
 - `web/public/scenarios/full-2018-2020.json` committed: the SPA build ships it,
   and CI builds from the checkout.
 
@@ -41,14 +40,25 @@ terraform output
 Keep `infra/bootstrap/terraform.tfstate` (git-ignored) somewhere safe; the
 resources rarely change, and if it is lost they can be imported back.
 
-The deploy role trusts only `repo:<owner>/batteryplan:ref:refs/heads/main`, so
-pushes to `main` and manual runs from `main`. Pull requests get no AWS access
-(CI validates Terraform offline). It holds `PowerUserAccess` plus IAM limited to
-roles under the `/batteryplan/` path, so it cannot change its own permissions.
+`github_repo` is compared case-sensitively: write it exactly as GitHub shows it.
 
-## 3. Google and LinkedIn apps
+The deploy role trusts only `repo:<owner>/<name>:ref:refs/heads/main`, so pushes
+to `main` and manual runs from `main`. Pull requests get no AWS access (CI
+validates Terraform offline). Its permissions are limited to the stack's own
+resources. It can create IAM roles only under `/batteryplan/` and only with the
+`lambda-boundary` permissions boundary, cannot attach managed policies, and can
+pass roles only to Lambda, so it cannot raise its own access.
 
-Both send users back to Cognito's managed login domain. With the default
+The bootstrap also turns on a multi-region CloudTrail trail (kept 90 days in a
+bucket the deploy role can't reach) and GuardDuty. GuardDuty is billed by usage
+after a 30-day trial; pass `-var enable_guardduty=false` to leave it off.
+
+Protect `main` with a ruleset requiring a pull request and the `python`, `go`,
+`web` and `terraform` checks, because every push to it deploys.
+
+## 3. Google app
+
+Google sends users back to Cognito's managed login domain. With the default
 `cognito_domain_prefix` the redirect URI is:
 
 ```
@@ -66,38 +76,6 @@ lists the URIs after the first apply.)
 3. *Clients → Create client → Web application*; authorized redirect URI: the
    URI above. Note the client id and secret.
 
-**LinkedIn** (linkedin.com/developers):
-1. *Create app*. LinkedIn requires an associated LinkedIn Page; your own page or
-   a placeholder one works.
-2. *Products*: add **Sign In with LinkedIn using OpenID Connect**.
-3. *Auth*: add the URI above under *Authorized redirect URLs*; note the client
-   id and primary client secret. The scopes `openid profile email` appear once
-   the product is added.
-
-### LinkedIn and Cognito: what to know
-
-- Endpoints are set by hand in `infra/aws/auth.tf` (authorize, token, userinfo
-  `https://api.linkedin.com/v2/userinfo`, JWKS), so Cognito doesn't use discovery.
-  It still checks the ID token's `iss` against `linkedin_oidc_issuer`, default
-  `https://www.linkedin.com/oauth` (what LinkedIn's discovery document says
-  today). LinkedIn's own docs show `https://www.linkedin.com`. If sign-in
-  comes back to the SPA with `error_description` mentioning the issuer or an
-  invalid ID token, set the GitHub variable
-  `LINKEDIN_OIDC_ISSUER=https://www.linkedin.com` and redeploy.
-- Cognito authenticates to LinkedIn's token endpoint with `client_secret_post`
-  (the only method it supports), which LinkedIn accepts.
-- `email` and `email_verified` are optional in LinkedIn's response. `email` is
-  therefore not a required attribute of the pool. A required attribute can't
-  be changed after the pool exists, and requiring it would block those users
-  at sign-in. The API must cope with an ID token without `email`.
-- `email_verified` comes back as a JSON boolean and is mapped explicitly.
-  Without a mapping Cognito marks every federated email unverified on each sign-in.
-  The app doesn't rely on it. If Cognito ever rejects the boolean, drop that
-  mapping line.
-- LinkedIn's `sub` is per app (pairwise), and the same person signing in with
-  Google and with LinkedIn becomes two Cognito users with two quotas. That's
-  acceptable here.
-
 ## 4. GitHub secrets and variables
 
 *Settings → Secrets and variables → Actions.*
@@ -107,11 +85,9 @@ lists the URIs after the first apply.)
 | variable | `AWS_DEPLOY_ROLE_ARN` | `deploy_role_arn` from the bootstrap |
 | variable | `TF_STATE_BUCKET` | `state_bucket` from the bootstrap |
 | variable | `GOOGLE_CLIENT_ID` | Google client id |
-| variable | `LINKEDIN_CLIENT_ID` | LinkedIn client id |
 | secret | `GOOGLE_CLIENT_SECRET` | Google client secret |
-| secret | `LINKEDIN_CLIENT_SECRET` | LinkedIn client secret |
 | secret | `BUDGET_EMAIL` | where budget alerts go |
-| variable (optional) | `LINKEDIN_OIDC_ISSUER` | only if LinkedIn sign-in fails on the issuer (§3) |
+| variable (optional) | `API_RESERVED_CONCURRENCY` | `10` once the Lambda quota is raised (§1); unset means unreserved |
 | variable (phase 6) | `SITE_DOMAIN`, `SITE_DOMAIN_ATTACH`, `AUTH_DOMAIN`, `AUTH_DOMAIN_ATTACH` | see §7 |
 
 ## 5. First deploy
@@ -123,15 +99,25 @@ Push to `main`, or run **deploy** from the Actions tab. It:
    indexes);
 2. builds `api.zip` and `dlq.zip` (`make zips`);
 3. `terraform apply` in `infra/aws` with the image digest and the zips;
-4. builds the SPA with `VITE_*` from the Terraform outputs, syncs it to the site
-   bucket (`assets/*` immutable for a year, other files 5 minutes, `index.html`
-   `no-cache`), and invalidates `/index.html`.
+4. builds the SPA with `VITE_*` from the Terraform outputs, in a job with no AWS
+   credentials because `pnpm` runs third-party code;
+5. syncs it to the site bucket (`assets/*` immutable for a year, other files 5
+   minutes, `index.html` `no-cache`), and invalidates `/index.html`.
 
 The summary of the run shows the URL (`https://dxxxx.cloudfront.net`). Check:
-`/api/health`, sign-in with both providers, a short run, an upload.
+`/api/health`, sign-in with Google, a short run, an upload.
 
 Budget alerts need no confirmation: they arrive at 80 % of actual and 100 % of
-forecast monthly spend.
+forecast monthly spend. The budget counts only resources tagged
+`Project=batteryplan`, and **reads zero until that tag is activated**. The tag
+can take up to 24 hours to appear in billing; then, from the management account:
+
+```sh
+aws ce update-cost-allocation-tags-status \
+  --cost-allocation-tags-status TagKey=Project,Status=Active
+```
+
+Activation is not retroactive: costs before it are not counted.
 
 To run Terraform from your machine (e.g. `terraform plan`):
 
@@ -204,7 +190,7 @@ created yet.
    `AUTH_DOMAIN=auth.batteryplan.gmachado.dev`, run deploy, add the validation
    CNAME from `terraform output auth_certificate_validation`, wait for **Issued**.
 2. Add `https://auth.batteryplan.gmachado.dev/oauth2/idpresponse` to the Google
-   and LinkedIn redirect URIs.
+   redirect URIs.
 3. Set `AUTH_DOMAIN_ATTACH=true`, run deploy.
 4. Cloudflare: `CNAME  auth.batteryplan  →  <xxxx>.cloudfront.net`
    (`terraform output auth_domain_target`), DNS only.

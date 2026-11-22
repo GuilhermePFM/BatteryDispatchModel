@@ -1,4 +1,4 @@
-# Cognito: social sign-in only (Google, LinkedIn), managed login on the free
+# Cognito: social sign-in only (Google), managed login on the free
 # prefix domain, one public app client for the SPA (authorization code + PKCE).
 
 resource "aws_cognito_user_pool" "main" {
@@ -14,8 +14,8 @@ resource "aws_cognito_user_pool" "main" {
     allow_admin_create_user_only = true
   }
 
-  # email is a standard attribute, left optional: LinkedIn may omit it, and a
-  # required attribute it does not send would fail the sign-in outright.
+  # email is a standard attribute, left optional: a required attribute can't be
+  # changed later and would fail the sign-in of any provider not sending it.
 
   account_recovery_setting {
     recovery_mechanism {
@@ -58,35 +58,6 @@ resource "aws_cognito_identity_provider" "google" {
   }
 }
 
-# LinkedIn as a generic OIDC provider ("Sign In with LinkedIn using OpenID
-# Connect"). The endpoints are given by hand rather than discovered, so only
-# the issuer string has to match what LinkedIn puts in its ID tokens.
-resource "aws_cognito_identity_provider" "linkedin" {
-  user_pool_id  = aws_cognito_user_pool.main.id
-  provider_name = "LinkedIn"
-  provider_type = "OIDC"
-
-  provider_details = {
-    client_id                 = var.linkedin_client_id
-    client_secret             = var.linkedin_client_secret
-    authorize_scopes          = "openid profile email"
-    attributes_request_method = "GET"
-    oidc_issuer               = var.linkedin_oidc_issuer
-    authorize_url             = "https://www.linkedin.com/oauth/v2/authorization"
-    token_url                 = "https://www.linkedin.com/oauth/v2/accessToken"
-    attributes_url            = "https://api.linkedin.com/v2/userinfo"
-    jwks_uri                  = "https://www.linkedin.com/oauth/openid/jwks"
-  }
-
-  # Cognito maps sub to username by itself for OIDC providers. Without an
-  # email_verified mapping Cognito marks every federated email unverified.
-  attribute_mapping = {
-    email          = "email"
-    email_verified = "email_verified"
-    name           = "name"
-  }
-}
-
 resource "aws_cognito_user_pool_client" "spa" {
   name         = "${var.project}-spa"
   user_pool_id = aws_cognito_user_pool.main.id
@@ -95,14 +66,12 @@ resource "aws_cognito_user_pool_client" "spa" {
   allowed_oauth_flows_user_pool_client = true
   allowed_oauth_flows                  = ["code"]
   allowed_oauth_scopes                 = ["openid", "email", "profile"]
-  supported_identity_providers = [
-    aws_cognito_identity_provider.google.provider_name,
-    aws_cognito_identity_provider.linkedin.provider_name,
-  ]
+  supported_identity_providers         = [aws_cognito_identity_provider.google.provider_name]
 
-  # web/src/auth: <origin>/auth/callback and <origin>/, plus Vite's dev server.
-  callback_urls = concat([for o in local.site_origins : "${o}/auth/callback"], ["http://localhost:5173/auth/callback"])
-  logout_urls   = concat([for o in local.site_origins : "${o}/"], ["http://localhost:5173/"])
+  # web/src/auth: <origin>/auth/callback and <origin>/. The local stack signs in
+  # with AUTH_MODE=dev and never comes through here.
+  callback_urls = [for o in local.site_origins : "${o}/auth/callback"]
+  logout_urls   = [for o in local.site_origins : "${o}/"]
 
   explicit_auth_flows           = ["ALLOW_REFRESH_TOKEN_AUTH"]
   prevent_user_existence_errors = "ENABLED"

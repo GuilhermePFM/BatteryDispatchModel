@@ -5,6 +5,13 @@ resource "aws_budgets_budget" "monthly" {
   limit_unit   = "USD"
   time_unit    = "MONTHLY"
 
+  # The account hosts other workloads. Reads zero until the Project cost
+  # allocation tag is activated (docs/deploy.md, "First deploy").
+  cost_filter {
+    name   = "TagKeyValue"
+    values = [format("user:Project$%s", var.project)]
+  }
+
   notification {
     comparison_operator        = "GREATER_THAN"
     threshold                  = 80

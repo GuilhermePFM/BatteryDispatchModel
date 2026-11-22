@@ -156,9 +156,9 @@ falls back to `Authorization` when it is absent (handy with curl locally). It
 checks the signature against the pool's JWKS (cached), `iss = COGNITO_ISSUER`,
 `aud = COGNITO_CLIENT_ID`, `token_use = id` and `exp`.
 
-`email` is optional: an identity provider may withhold it (LinkedIn can). The
-token is still accepted, the user item then has no `email`, and `GET /api/me`
-answers `"email": null`.
+`email` is optional: an identity provider may withhold it. The token is still
+accepted, the user item then has no `email`, and `GET /api/me` answers
+`"email": null`.
 
 For the same OAC reason, every request with a body (`POST`, `PUT`) carries
 `x-amz-content-sha256`: the lowercase hex SHA-256 of the exact body bytes,

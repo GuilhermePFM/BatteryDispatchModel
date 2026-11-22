@@ -11,7 +11,7 @@ export function Privacy() {
         <div className="prose privacy" style={{ marginTop: 24 }}>
           <h2>Signing in</h2>
           <p>
-            Viewing the site needs no account. Running a plan does: you sign in with Google or LinkedIn through Amazon Cognito, which runs the sign-in on this
+            Viewing the site needs no account. Running a plan does: you sign in with Google through Amazon Cognito, which runs the sign-in on this
             site&apos;s behalf. The site never sees your password.
           </p>
           <h2>What is stored</h2>
