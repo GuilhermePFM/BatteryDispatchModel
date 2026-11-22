@@ -9,7 +9,7 @@ resource "aws_budgets_budget" "monthly" {
   # allocation tag is activated (docs/deploy.md, "First deploy").
   cost_filter {
     name   = "TagKeyValue"
-    values = ["user:Project$${var.project}"]
+    values = [format("user:Project$%s", var.project)]
   }
 
   notification {
