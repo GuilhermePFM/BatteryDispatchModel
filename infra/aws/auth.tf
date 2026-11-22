@@ -100,9 +100,10 @@ resource "aws_cognito_user_pool_client" "spa" {
     aws_cognito_identity_provider.linkedin.provider_name,
   ]
 
-  # web/src/auth: <origin>/auth/callback and <origin>/, plus Vite's dev server.
-  callback_urls = concat([for o in local.site_origins : "${o}/auth/callback"], ["http://localhost:5173/auth/callback"])
-  logout_urls   = concat([for o in local.site_origins : "${o}/"], ["http://localhost:5173/"])
+  # web/src/auth: <origin>/auth/callback and <origin>/. The local stack signs in
+  # with AUTH_MODE=dev and never comes through here.
+  callback_urls = [for o in local.site_origins : "${o}/auth/callback"]
+  logout_urls   = [for o in local.site_origins : "${o}/"]
 
   explicit_auth_flows           = ["ALLOW_REFRESH_TOKEN_AUTH"]
   prevent_user_existence_errors = "ENABLED"

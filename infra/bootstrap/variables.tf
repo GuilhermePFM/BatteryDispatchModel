@@ -19,3 +19,9 @@ variable "create_github_oidc_provider" {
   type        = bool
   default     = true
 }
+
+variable "enable_guardduty" {
+  description = "Turn on GuardDuty in the region; set false if the account already has a detector, or to avoid its usage cost after the 30-day trial."
+  type        = bool
+  default     = true
+}

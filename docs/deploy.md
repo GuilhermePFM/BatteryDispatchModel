@@ -9,7 +9,7 @@ alert.
 
 | Path | What |
 | --- | --- |
-| `infra/bootstrap/` | Applied once, by you: state bucket, GitHub OIDC provider, deploy role, the solver's ECR repository |
+| `infra/bootstrap/` | Applied by you: state bucket, GitHub OIDC provider, deploy role and its boundary, the solver's ECR repository, CloudTrail, GuardDuty |
 | `infra/aws/` | Everything else, applied by `.github/workflows/deploy.yml` on every push to `main` |
 | `.github/workflows/ci.yml` | Python, Go, web and Terraform checks on pull requests and pushes |
 
@@ -41,10 +41,21 @@ terraform output
 Keep `infra/bootstrap/terraform.tfstate` (git-ignored) somewhere safe; the
 resources rarely change, and if it is lost they can be imported back.
 
-The deploy role trusts only `repo:<owner>/batteryplan:ref:refs/heads/main`, so
-pushes to `main` and manual runs from `main`. Pull requests get no AWS access
-(CI validates Terraform offline). It holds `PowerUserAccess` plus IAM limited to
-roles under the `/batteryplan/` path, so it cannot change its own permissions.
+`github_repo` is compared case-sensitively: write it exactly as GitHub shows it.
+
+The deploy role trusts only `repo:<owner>/<name>:ref:refs/heads/main`, so pushes
+to `main` and manual runs from `main`. Pull requests get no AWS access (CI
+validates Terraform offline). Its permissions are limited to the stack's own
+resources. It can create IAM roles only under `/batteryplan/` and only with the
+`lambda-boundary` permissions boundary, cannot attach managed policies, and can
+pass roles only to Lambda, so it cannot raise its own access.
+
+The bootstrap also turns on a multi-region CloudTrail trail (kept 90 days in a
+bucket the deploy role can't reach) and GuardDuty. GuardDuty is billed by usage
+after a 30-day trial; pass `-var enable_guardduty=false` to leave it off.
+
+Protect `main` with a ruleset requiring a pull request and the `python`, `go`,
+`web` and `terraform` checks, because every push to it deploys.
 
 ## 3. Google and LinkedIn apps
 
@@ -123,9 +134,10 @@ Push to `main`, or run **deploy** from the Actions tab. It:
    indexes);
 2. builds `api.zip` and `dlq.zip` (`make zips`);
 3. `terraform apply` in `infra/aws` with the image digest and the zips;
-4. builds the SPA with `VITE_*` from the Terraform outputs, syncs it to the site
-   bucket (`assets/*` immutable for a year, other files 5 minutes, `index.html`
-   `no-cache`), and invalidates `/index.html`.
+4. builds the SPA with `VITE_*` from the Terraform outputs, in a job with no AWS
+   credentials because `pnpm` runs third-party code;
+5. syncs it to the site bucket (`assets/*` immutable for a year, other files 5
+   minutes, `index.html` `no-cache`), and invalidates `/index.html`.
 
 The summary of the run shows the URL (`https://dxxxx.cloudfront.net`). Check:
 `/api/health`, sign-in with both providers, a short run, an upload.

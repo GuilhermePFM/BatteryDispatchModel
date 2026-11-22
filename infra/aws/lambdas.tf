@@ -13,6 +13,9 @@ locals {
   cognito_client_id_parameter = "/${var.project}/cognito-client-id"
 
   cognito_issuer = "https://${aws_cognito_user_pool.main.endpoint}"
+
+  # Created by infra/bootstrap; the deploy role can only create roles with it.
+  lambda_boundary_arn = "arn:aws:iam::${local.account_id}:policy/${var.project}/lambda-boundary"
 }
 
 data "aws_ecr_repository" "solver" {
@@ -63,9 +66,10 @@ locals {
 # --- API ---------------------------------------------------------------------
 
 resource "aws_iam_role" "api" {
-  name               = local.api_name
-  path               = "/${var.project}/"
-  assume_role_policy = data.aws_iam_policy_document.lambda_trust.json
+  name                 = local.api_name
+  path                 = "/${var.project}/"
+  assume_role_policy   = data.aws_iam_policy_document.lambda_trust.json
+  permissions_boundary = local.lambda_boundary_arn
 }
 
 data "aws_iam_policy_document" "api" {
@@ -170,9 +174,10 @@ resource "aws_lambda_permission" "api_cloudfront_invoke" {
 # --- DLQ handler -------------------------------------------------------------
 
 resource "aws_iam_role" "dlq" {
-  name               = local.dlq_name
-  path               = "/${var.project}/"
-  assume_role_policy = data.aws_iam_policy_document.lambda_trust.json
+  name                 = local.dlq_name
+  path                 = "/${var.project}/"
+  assume_role_policy   = data.aws_iam_policy_document.lambda_trust.json
+  permissions_boundary = local.lambda_boundary_arn
 }
 
 data "aws_iam_policy_document" "dlq" {
@@ -224,9 +229,10 @@ resource "aws_lambda_event_source_mapping" "dlq" {
 # --- Solver ------------------------------------------------------------------
 
 resource "aws_iam_role" "solver" {
-  name               = local.solver_name
-  path               = "/${var.project}/"
-  assume_role_policy = data.aws_iam_policy_document.lambda_trust.json
+  name                 = local.solver_name
+  path                 = "/${var.project}/"
+  assume_role_policy   = data.aws_iam_policy_document.lambda_trust.json
+  permissions_boundary = local.lambda_boundary_arn
 }
 
 data "aws_iam_policy_document" "solver" {
