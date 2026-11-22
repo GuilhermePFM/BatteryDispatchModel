@@ -21,8 +21,8 @@ table, one data bucket, Cognito with Google, and a US$ 5 budget alert.
 - Lambda's account concurrency quota. New accounts sometimes get 10 concurrent
   executions, which leaves nothing for the API's reserved 10. Check *Service
   Quotas → AWS Lambda → Concurrent executions*; ask for 1000 (free, usually
-  granted within a day), or deploy with `TF_VAR_api_reserved_concurrency=-1`
-  meanwhile.
+  granted within a day). The workflow deploys the API unreserved until you set
+  the GitHub variable `API_RESERVED_CONCURRENCY=10`, which needs the higher quota.
 - `web/public/scenarios/full-2018-2020.json` committed: the SPA build ships it,
   and CI builds from the checkout.
 
@@ -87,6 +87,7 @@ lists the URIs after the first apply.)
 | variable | `GOOGLE_CLIENT_ID` | Google client id |
 | secret | `GOOGLE_CLIENT_SECRET` | Google client secret |
 | secret | `BUDGET_EMAIL` | where budget alerts go |
+| variable (optional) | `API_RESERVED_CONCURRENCY` | `10` once the Lambda quota is raised (§1); unset means unreserved |
 | variable (phase 6) | `SITE_DOMAIN`, `SITE_DOMAIN_ATTACH`, `AUTH_DOMAIN`, `AUTH_DOMAIN_ATTACH` | see §7 |
 
 ## 5. First deploy

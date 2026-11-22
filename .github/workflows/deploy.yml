@@ -105,6 +105,8 @@ jobs:
           TF_VAR_google_client_id: ${{ vars.GOOGLE_CLIENT_ID }}
           TF_VAR_google_client_secret: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           TF_VAR_budget_email: ${{ secrets.BUDGET_EMAIL }}
+          # -1 is unreserved, for an account still on the 10-execution quota.
+          TF_VAR_api_reserved_concurrency: ${{ vars.API_RESERVED_CONCURRENCY || '-1' }}
           # Phase 6, all optional (docs/deploy.md, "Custom domain").
           TF_VAR_site_domain: ${{ vars.SITE_DOMAIN }}
           TF_VAR_site_domain_attach: ${{ vars.SITE_DOMAIN_ATTACH || 'false' }}
