@@ -23,8 +23,6 @@ table, one data bucket, Cognito with Google, and a US$ 5 budget alert.
   Quotas → AWS Lambda → Concurrent executions*; ask for 1000 (free, usually
   granted within a day). The workflow deploys the API unreserved until you set
   the GitHub variable `API_RESERVED_CONCURRENCY=10`, which needs the higher quota.
-- `web/public/scenarios/full-2018-2020.json` committed: the SPA build ships it,
-  and CI builds from the checkout.
 
 ## 2. Bootstrap (once, locally)
 

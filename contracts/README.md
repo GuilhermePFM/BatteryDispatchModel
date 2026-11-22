@@ -35,7 +35,7 @@ The battery fields are named after `battery_plan.data_models.BatterySpec` and
 carry its units, so the solver builds the spec with `BatterySpec(**battery)`
 (`battery_plan.contracts.spec_from_request`).
 
-| Field | Unit | Min | Max | Attachment 1 |
+| Field | Unit | Min | Max | Battery spec |
 | --- | --- | ---: | ---: | ---: |
 | `battery.max_charge_rate_mw` | MW | 0.1 | 100 | 2 |
 | `battery.max_discharge_rate_mw` | MW | 0.1 | 100 | 2 |
@@ -49,7 +49,7 @@ carry its units, so the solver builds the spec with `BatterySpec(**battery)`
 | `battery.fixed_opex_gbp_per_year` | GBP/year | 0 | 10⁸ | 5,000 |
 | `cycle_budget` *(optional)* | cycles over the run's horizon | 1 | 100,000 | absent → `lifetime_cycles` |
 | `start`, `end` | `YYYY-MM-DD`, `end` inclusive of its whole day | | | |
-| `prices_key` *(optional)* | S3 key of an uploaded CSV | | | absent → bundled 2018–2020 |
+| `prices_key` *(optional)* | S3 key of an uploaded CSV | | | absent → bundled prices, where the deployment has them; otherwise rejected |
 
 All battery fields are required; the schema's `default`s are what the form
 should pre-fill, not values either side fills in. There is no `search` field:
@@ -174,7 +174,7 @@ from an earlier run. Both sides compute it the same way:
 2. Take the prices' content hash: lowercase hex sha256 of the CSV's bytes as
    stored in S3, or, for the bundled prices, the constant
    `f26dc09b7eb4bcb3755b615c0595132937dee3dbb4b82e915648be7e53a95ce9`
-   (sha256 of `data/raw/attachment_2_market_prices.xlsx`,
+   (sha256 of `data/raw/market_prices.xlsx`,
    `battery_plan.contracts.BUNDLED_PRICES_SHA256`).
 3. Build `{"prices_sha256": <hash>, "request": <request>}` and serialise it as
    canonical JSON per [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785)

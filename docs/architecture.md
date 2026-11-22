@@ -2,7 +2,7 @@
 
 *How the code is structured, every class with the reason it exists, why the constraints are separate blocks, and how two search algorithms share one seam.*
 
-[← README](../README.md) · [data](data.md) · [solve](solve.md) ·
+[← README](../README.md) · [solve](solve.md) ·
 [cycle budget](cycle-budget.md) · [validation](validation.md) ·
 [glossary](glossary.md)
 
@@ -105,17 +105,17 @@ src/battery_plan/
 
 **`BatterySpec`** · `data_models/battery.py` 
 
-§2 Frozen `slots` dataclass whose ten fields mirror Attachment 1 row for row, in the spreadsheet's own units. Keeping the odd units here makes the loader auditable against the file; every conversion is pushed into `ModelParameters`, so there is exactly one place to check them. ([the fields](data.md#attachment-1-the-battery))
+§2 Frozen `slots` dataclass whose ten fields mirror the battery spec row for row, in the spreadsheet's own units. Keeping the odd units here makes the loader auditable against the file; every conversion is pushed into `ModelParameters`, so there is exactly one place to check them. (the fields)
 
 **`MarketPrices`** · `data_models/market_prices.py` 
 
-The two price series at their native resolutions, plus `start`, `end` and `between()`. `between()` filters with a boolean mask rather than `.loc` slicing, because the raw Market 1 index is [not monotonic](data.md#the-quirks-surfaced-and-deliberately-not-repaired) at the spring clock changes and label slicing would raise there.
+The two price series at their native resolutions, plus `start`, `end` and `between()`. `between()` filters with a boolean mask rather than `.loc` slicing, because the raw Market 1 index is not monotonic at the spring clock changes and label slicing would raise there.
 
 ### `data_io`: file operations
 
 **`load_battery_spec`** · `data_io/loaders.py`
 
-Reads Attachment 1 through an explicit *spreadsheet label → field name* map and raises listing every missing row rather than defaulting silently.
+Reads the battery spec through an explicit *spreadsheet label → field name* map and raises listing every missing row rather than defaulting silently.
 
 **`load_market_prices`** · `data_io/loaders.py`
 
@@ -129,7 +129,7 @@ Counts duplicate timestamps, irregular steps and monotonicity per market, and *r
 
 **`SettlementPeriods` · `build_periods`** · `modelling/periods.py` · §1, §5 
 
-Projects both markets onto one half-hourly axis as three aligned arrays (`timestamps`, `price_1`, `price_2`), with the hourly price repeated across its two half hours. Pairing is [positional](data.md#why-pairing-is-positional) and Market 2's labels are canonical. `window()` and `between()` keep every slice whole-hour aligned, so an hourly commitment can never be cut in half.
+Projects both markets onto one half-hourly axis as three aligned arrays (`timestamps`, `price_1`, `price_2`), with the hourly price repeated across its two half hours. Pairing is positional and Market 2's labels are canonical. `window()` and `between()` keep every slice whole-hour aligned, so an hourly commitment can never be cut in half.
 
 **`ModelParameters`** · `modelling/parameters.py` · §2
 
@@ -163,7 +163,7 @@ Decisions as six numpy arrays plus the solver status, and `state_after(periods)`
 
 **`RollingPolicy`** · `modelling/rolling_horizon.py` · §6
 
-A frozen dataclass of five knobs (`commit_periods`, `lookahead_periods`, `cycle_value`, `blocks`, `time_limit`) plus an optional `on_window` progress callback. Frozen because [the searches](model/cycle-value-experiments.md) need variants of a configuration without mutating the caller's:
+A frozen dataclass of five knobs (`commit_periods`, `lookahead_periods`, `cycle_value`, `blocks`, `time_limit`) plus an optional `on_window` progress callback. Frozen because the searches need variants of a configuration without mutating the caller's:
 `replace(policy, cycle_value=λ, blocks=UNCAPPED_BLOCKS)` is a whole relaxed pass. `blocks` is what makes the policy serve both the capped and the relaxed subproblem without knowing which method asked. `__post_init__` rejects a window that is not a whole number of hours, the one invariant that would silently split a Market 2 commitment. What it does with those windows is
 [the solve](solve.md).
 
@@ -177,7 +177,7 @@ A `Protocol` taking prices and returning a plan, rather than an abstract base cl
 
 **`CycleOracle` · `DualPoint`** · `modelling/cycle_value/oracle.py` · §6
 
-One pass of the horizon at one charge, memoised on `(price, relaxed)` and counted. The pass is the unit of cost — 44 s on the three-year horizon when the budget binds and `λ ≈ £30` prices the marginal trades out, 172 s on the headline run where `λ = 0` and nothing is — so it is written once and `oracle.passes` is the number any comparison of methods turns on rather than a figure each method reports about itself. `DualPoint` is what a pass yields: the Lagrangian value, the exact subgradient, the profit, the cycles, the plan, and whether that plan is deliverable.
+One pass of the horizon at one charge, memoised on `(price, relaxed)` and counted. The pass is the unit of cost, so it is written once and `oracle.passes` is the number any comparison of methods turns on rather than a figure each method reports about itself. `DualPoint` is what a pass yields: the Lagrangian value, the exact subgradient, the profit, the cycles, the plan, and whether that plan is deliverable.
 
 **`DualSearch` · `SEARCHES`** · `modelling/cycle_value/oracle.py` · `modelling/cycle_value/searches.py` · §6
 
@@ -245,10 +245,9 @@ problem). `ModelContext` is the **Parameter Object** that keeps the strategy sig
   catch a block adding nothing, or adding §4.5's rows to the wrong periods. The
   previous design could only test the assembled model, through a solve.
 - **A constraint can be valued.** `blocks` is an argument, so omitting one and
-  re-solving measures what it costs. Over week 1 of the real prices, dropping
-  `hourly_commitment` lifts profit from £1,231.06 to £1,249.77, so the hourly
-  commitment of §4.5 costs about £19 a week, measured with no new model code to
-  write or keep correct. `relaxing(*blocks)` is that omission as a named
+  re-solving measures what it costs. Dropping `hourly_commitment`, for one, shows what
+  the hourly commitment of §4.5 costs, with no new model code to write or keep
+  correct. `relaxing(*blocks)` is that omission as a named
   operation, and it is what [§4](#4-how-to-obtain-the-lagrangian-price-cutting-planes-and-bissection) builds
   the Lagrangian relaxation of the cycle budget from. Two caveats, both stated in
   the blocks' own docstrings: a constraint that is also a *variable bound* is
@@ -287,8 +286,7 @@ subproblem.**
 Bisection reads one bit per pass, *was the budget exhausted?*, and that bit only
 exists when the window **caps** the cumulative count. The cutting-plane
 method reads a value and a subgradient, and those are only meaningful when the
-cap is **removed** and replaced by the lagrangian. The
-numbers are in [cycle-value experiments §1](model/cycle-value-experiments.md#1-what-a-pass-has-to-report).
+cap is **removed** and replaced by the lagrangian.
 
 So "which algorithm" and "which subproblem" are one choice. A method flag would
 have had to reach from the outer search down into model construction, re-coupling

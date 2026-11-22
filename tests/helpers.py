@@ -9,7 +9,7 @@ from battery_plan.data_models import BatterySpec, MarketPrices
 from battery_plan.modelling.parameters import ModelParameters
 from battery_plan.modelling.periods import PERIODS_PER_HOUR, SettlementPeriods, build_periods
 
-#: Attachment 1 as given, so the tests read against the numbers in the write-up.
+#: The battery spec as given, so the tests read against the numbers in the write-up.
 SPEC = BatterySpec(
     max_charge_rate_mw=2.0,
     max_discharge_rate_mw=2.0,

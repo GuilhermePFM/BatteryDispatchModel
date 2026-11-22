@@ -7,5 +7,5 @@ DATA_DIR = PROJECT_ROOT / "data"
 RAW_DATA_DIR = DATA_DIR / "raw"
 RESULTS_DIR = DATA_DIR / "results"
 
-BATTERY_SPEC_XLSX = RAW_DATA_DIR / "attachment_1_battery_spec.xlsx"
-MARKET_PRICES_XLSX = RAW_DATA_DIR / "attachment_2_market_prices.xlsx"
+BATTERY_SPEC_XLSX = RAW_DATA_DIR / "battery_spec.xlsx"
+MARKET_PRICES_XLSX = RAW_DATA_DIR / "market_prices.xlsx"

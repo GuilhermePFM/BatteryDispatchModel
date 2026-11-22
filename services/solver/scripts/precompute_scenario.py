@@ -1,10 +1,10 @@
-"""Write the site's precomputed scenario: Attachment 1 over all of 2018-2020.
+"""Write the site's precomputed scenario.
 
     uv run python services/solver/scripts/precompute_scenario.py
 
-The full three-year horizon is longer than a web request may ask for (365
+A multi-year horizon is longer than a web request may ask for (365
 days), so the site ships it as a static file instead,
-``web/public/scenarios/full-2018-2020.json``: a run-record with status
+``web/public/scenarios/default.json``: a run-record with status
 ``succeeded`` and the ``result`` object inline, as ``GET /api/runs/{run_id}``
 would return it. The run is the web's own — cutting planes, one committed day
 and one day of lookahead — and takes 10-15 minutes.
@@ -40,14 +40,14 @@ from battery_plan.dispatch import run_dispatch
 from battery_plan.reporting import ProgressEvent
 
 CONTRACTS = PROJECT_ROOT / "contracts"
-OUT = PROJECT_ROOT / "web" / "public" / "scenarios" / "full-2018-2020.json"
+OUT = PROJECT_ROOT / "web" / "public" / "scenarios" / "default.json"
 
-RUN_ID = "full-2018-2020"
+RUN_ID = "default"
 USER_SUB = "precomputed"
 #: Stands in for the plan CSV's S3 key, which the schema requires and this run lacks.
 NO_PLAN_CSV = "precomputed/no-plan-csv"
 
-#: Attachment 1 as given, over the whole of the bundled data.
+#: The battery spec as given, over the whole of the bundled data.
 REQUEST: dict[str, Any] = {
     "battery": {
         "max_charge_rate_mw": 2,

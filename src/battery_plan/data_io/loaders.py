@@ -1,4 +1,4 @@
-"""Loading of the two spreadsheets supplied with the exercise, and of uploaded prices.
+"""Loading of the two input spreadsheets, and of uploaded prices.
 
 The loaders stay deliberately thin: they read and name the inputs, and leave
 every modelling choice to :mod:`battery_plan.modelling`. The known timestamp
@@ -30,7 +30,7 @@ from battery_plan.data_models import (
     MarketPrices,
 )
 
-#: Row labels in Attachment 1 mapped onto :class:`BatterySpec` fields.
+#: Row labels in the battery spec mapped onto :class:`BatterySpec` fields.
 _SPEC_FIELDS: dict[str, str] = {
     "Max charging rate": "max_charge_rate_mw",
     "Max discharging rate": "max_discharge_rate_mw",
@@ -49,7 +49,7 @@ MARKET_2_SHEET = "Hourly data"
 
 
 def load_battery_spec(path: Path | str = BATTERY_SPEC_XLSX) -> BatterySpec:
-    """Read Attachment 1 into a :class:`BatterySpec`."""
+    """Read the battery spec into a :class:`BatterySpec`."""
     frame = pd.read_excel(path, sheet_name="Data", index_col=0)
     values = frame["Values"]
 
@@ -61,7 +61,7 @@ def load_battery_spec(path: Path | str = BATTERY_SPEC_XLSX) -> BatterySpec:
 
 
 def load_market_prices(path: Path | str = MARKET_PRICES_XLSX) -> MarketPrices:
-    """Read Attachment 2 into a :class:`MarketPrices`.
+    """Read the price data into a :class:`MarketPrices`.
 
     The hourly sheet is laid out on the half-hourly settlement with blank rows on the
     half hours; those are dropped so each series keeps its own resolution.

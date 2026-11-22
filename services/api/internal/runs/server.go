@@ -55,6 +55,9 @@ type Server struct {
 	Limits   quota.Limits
 	Rate     quota.Rate
 
+	// BundledPrices allows a run with no upload; the solver image must carry them.
+	BundledPrices bool
+
 	Now func() time.Time
 	Log *slog.Logger
 }

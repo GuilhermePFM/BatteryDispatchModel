@@ -18,6 +18,8 @@ const template = readFileSync(
   "utf8",
 );
 
+const upload = { name: "prices.csv", size: 1, firstDay: "2018-01-01", lastDay: "2020-12-31" };
+
 describe("schema-driven fields", () => {
   it("pre-fills every battery field with the schema default", () => {
     const values = defaultValues();
@@ -47,7 +49,8 @@ describe("schema-driven fields", () => {
 
 describe("validate", () => {
   it("accepts the defaults", () => {
-    expect(validate(defaultValues())).toEqual({});
+    expect(validate(defaultValues(), upload)).toEqual({});
+    expect(validate(defaultValues()).prices).toBe("Upload a price file.");
   });
 
   it("sends no window scheme: every web run commits a day with the next in view", () => {
@@ -55,19 +58,19 @@ describe("validate", () => {
     expect(Object.keys(request).sort()).toEqual(["battery", "end", "start"]);
   });
 
-  it("checks the date order, the 365-day span and the bundled range", () => {
+  it("checks the date order, the 365-day span and the file's range", () => {
     expect(validate({ ...defaultValues(), start: "2019-03-01", end: "2019-02-01" }).end).toMatch(
       /before the start/,
     );
     // 2020 is a leap year: 2020-01-01 + 365 days is 2020-12-31, the limit.
-    expect(validate({ ...defaultValues(), start: "2020-01-01", end: "2020-12-31" })).toEqual({});
+    expect(validate({ ...defaultValues(), start: "2020-01-01", end: "2020-12-31" }, upload)).toEqual({});
     expect(validate({ ...defaultValues(), start: "2019-01-01", end: "2020-01-02" }).end).toMatch(
       /At most 365 days/,
     );
-    expect(validate({ ...defaultValues(), start: "2017-12-31", end: "2018-01-05" }).start).toMatch(
+    expect(validate({ ...defaultValues(), start: "2017-12-31", end: "2018-01-05" }, upload).start).toMatch(
       /2018-01-01/,
     );
-    expect(validate({ ...defaultValues(), start: "2020-12-01", end: "2021-01-01" }).end).toMatch(
+    expect(validate({ ...defaultValues(), start: "2020-12-01", end: "2021-01-01" }, upload).end).toMatch(
       /2020-12-31/,
     );
     expect(validate({ ...defaultValues(), start: "2019-02-30" }).start).toMatch(/YYYY-MM-DD/);
@@ -75,10 +78,10 @@ describe("validate", () => {
 
   it("checks an optional cycle budget only when given", () => {
     expect(validate({ ...defaultValues(), cycle_budget: "0" }).cycle_budget).toMatch(/At least 1/);
-    expect(validate({ ...defaultValues(), cycle_budget: "500" })).toEqual({});
+    expect(validate({ ...defaultValues(), cycle_budget: "500" }, upload)).toEqual({});
   });
 
-  it("holds the dates to an uploaded file's span instead of the bundled one", () => {
+  it("holds the dates to an uploaded file's span", () => {
     const file = inspectPriceCsv("jan.csv", template.length, template);
     expect(file).toMatchObject({ firstDay: "2018-01-01", lastDay: "2018-01-31" });
     const ok = { ...defaultValues(), start: "2018-01-02", end: "2018-01-30" };

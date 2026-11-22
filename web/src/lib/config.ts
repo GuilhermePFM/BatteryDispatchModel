@@ -14,9 +14,9 @@ export const cognito = {
 
 export const repoUrl = (import.meta.env.VITE_REPO_URL ?? "https://github.com/GuilhermePFM/BatteryCase/blob/main").replace(/\/$/, "");
 
-export const scenarioUrl = import.meta.env.VITE_SCENARIO_URL || "/scenarios/full-2018-2020.json";
+export const scenarioUrl = import.meta.env.VITE_SCENARIO_URL || "/scenarios/default.json";
 
-export const contactEmail = "guilhermepfm@gmail.com";
+export const contactEmail = "gui@gmachado.dev";
 
 export function origin(): string {
   return typeof window === "undefined" ? "http://localhost" : window.location.origin;

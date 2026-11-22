@@ -349,7 +349,7 @@ The second row is the useful comparison in one respect only: a **one-week** tree
 that branches three ways a day carries as many binaries as the **three-year**
 deterministic program of M§6. It should not be read as implying the same
 difficulty. That program's hour was spent almost entirely at the root
-([`tractability.md`](tractability.md): `Nodes 2`, the search barely branched), on a
+on a
 relaxation weakened by a cycle budget coupling 1,096 days; over a week that budget
 does not bind and the paths are short. The point of the table is the exponent, not
 the row: a tree over three years of daily stages has more nodes than can be
@@ -379,7 +379,7 @@ different seams:
 
 - **By node, along the state.** Treating $(S, n_{\text{cyc}})$ as the state of a
   dynamic program is what makes the rolling decomposition of
-  [`tractability.md`](tractability.md) work on the deterministic model, and the
+  M§6 work on the deterministic model, and the
   tree is its stochastic analogue: a value function per day, estimated from the
   children. Stochastic dual dynamic programming is the standard method here, and
  it is **not valid as it stands**, because the $u(n, \tau)$ of §5.4 are integer

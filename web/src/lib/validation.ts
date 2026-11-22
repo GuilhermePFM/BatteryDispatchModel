@@ -4,8 +4,6 @@
 import schema from "../../../contracts/run-request.schema.json";
 import type { BatteryRequest, RunRequest } from "../contracts/types";
 
-export const BUNDLED_START = "2018-01-01";
-export const BUNDLED_END = "2020-12-31";
 export const MAX_SPAN_DAYS = 365;
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 export const CSV_HEADER = "timestamp,market_1,market_2";
@@ -215,10 +213,7 @@ export function validate(values: FormValues, file?: PriceFileInfo | null): FormE
       errors.end = `The file ends on ${file.lastDay}.`;
     }
   } else {
-    const lo = parseDay(BUNDLED_START)!;
-    const hi = parseDay(BUNDLED_END)!;
-    if (start !== null && start < lo) errors.start = `The bundled prices start on ${BUNDLED_START}.`;
-    if (end !== null && end > hi) errors.end = `The bundled prices end on ${BUNDLED_END}.`;
+    errors.prices = "Upload a price file.";
   }
   return errors;
 }

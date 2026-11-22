@@ -1,4 +1,4 @@
-"""Data models: the typed description of the exercise inputs.
+"""Data models: the typed description of the inputs.
 
 Plain containers only — no loading, no modelling.
 """

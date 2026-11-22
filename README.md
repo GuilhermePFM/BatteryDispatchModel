@@ -3,16 +3,10 @@
 A battery that trades two GB power markets, planned half hour by half hour.
 BatteryPlan solves the dispatch as a mixed-integer linear program (pulp + HiGHS)
 over rolling windows, prices the battery's cycle budget with Lagrangian cutting
-planes, and serves it as a small serverless web app: change the battery, pick up
-to a year of 2018–2020 prices or upload your own, and watch the solve run.
+planes, and serves it as a small serverless web app: change the battery, upload
+up to a year of prices, and watch the solve run.
 
 **Site:** <https://batteryplan.gmachado.dev> · **Method:** [`docs/model/model.md`](docs/model/model.md)
-
-![Home page with the 2018–2020 dashboard, dev sign-in, a 46-day run with a 10-cycle budget, its progress, and the result dashboard](docs/media/demo.gif)
-
-*The local stack (LocalStack, the Go API, the Python solver) with the dev sign-in: the
-precomputed three-year dashboard, a 46-day run with a 10-cycle budget, the cutting
-plane's passes as they arrive, the result. Sped up 1.25×.*
 
 ## Architecture
 
@@ -21,7 +15,7 @@ flowchart LR
     U(["browser"])
     COG["<b>Cognito</b><br/>Google"]
     CF["<b>CloudFront</b>"]
-    SITE[("<b>S3</b> site<br/>SPA + 3-year scenario")]
+    SITE[("<b>S3</b> site<br/>SPA")]
     API["<b>API</b> · Go Lambda<br/>Function URL, OAC"]
     DDB[("<b>DynamoDB</b><br/>one table")]
     Q["<b>SQS</b> jobs"]
@@ -70,20 +64,17 @@ deployed by GitHub Actions through OIDC, with no long-lived AWS keys.
   container image at 1769 MB, the size at which Lambda grants one full vCPU.
 - **Runs are capped at one year.** A Lambda lives at most 15 minutes (the solver
   is given 10), and a binding cycle budget takes about ten passes of the rolling
-  horizon to price. A year prices in nine passes, about 100 s on a laptop; three
-  years take ten passes and 7 min 20 s
-  ([measured](docs/model/cycle-value-experiments.md)), with no margin on one
-  Lambda vCPU. So the three-year scenario is solved once, offline, and served as
-  a static file.
+  horizon to price, so longer horizons are solved offline and served as a static
+  file.
 - **Every run is solved against the Lambda's time limit.** Before each round of
   the cycle-value search the solver checks that one more pass and the recovery
   pass still fit in the time left; if they don't, it stops early and still
   delivers a plan within the cycle budget. The result page says so, and shows how
   close that plan is to the best possible from the dual bound.
 - **The window is fixed for web runs.** Each day is planned with the next day in
-  view (commit 1 day, lookahead 1 day). Longer windows add nothing on this data
-  ([`docs/solve.md`](docs/solve.md), §6 of the method) and only cost time against
-  that limit, so the form doesn't offer them; the CLI still does.
+  view (commit 1 day, lookahead 1 day). Longer windows
+  ([`docs/solve.md`](docs/solve.md), §6 of the method) cost time against that
+  limit, so the form doesn't offer them; the CLI still does.
 - **Rate limiting in layers**, each cheaper than the one behind it:
   the Function URL accepts only requests CloudFront signed (OAC); 60 requests a
   minute per IP; sign-in required to submit; 3 runs a day per user; 60 runs a day
@@ -110,8 +101,8 @@ and every MWh pushed through wears the asset out a little.
 
 ```mermaid
 flowchart LR
-    M1["<b>Market 1</b><br/>half-hourly<br/>52,608 prices"]
-    M2["<b>Market 2</b><br/>hourly<br/>26,304 prices"]
+    M1["<b>Market 1</b><br/>half-hourly"]
+    M2["<b>Market 2</b><br/>hourly"]
     B["<b>Battery</b><br/>2 MW in / 2 MW out<br/>4 MWh store"]
 
     M1 -- "buy (−5% on charge)" --> B
@@ -137,7 +128,7 @@ The decision variables are half-hourly charge and discharge in each market; the
 constraints are storage bounds, the energy balance with losses, mode exclusivity
 and rate limits, the hourly commitment of Market 2, cycle accounting with a life
 cap, and storage degradation (§4.1–§4.7 of [`model.md`](docs/model/model.md));
-the objective is arbitrage profit net of cycle wear. One program over all 52,608
+the objective is arbitrage profit net of cycle wear. One program over all the
 periods, each carrying a binary, is not tractable, so **the horizon is
 decomposed** into windows, by default a day committed with a day of foresight:
 1,096 window MILPs over three years.
@@ -149,19 +140,8 @@ which also return a dual bound on how far the plan can be from the optimum
 ([`docs/cycle-budget.md`](docs/cycle-budget.md)). A bisection on λ is kept as the
 reference method ([`docs/bisection.md`](docs/bisection.md)).
 
-Over 2018–2020 with the full cycle budget
-([`docs/model/results.md`](docs/model/results.md)):
-
-| Figure | Value |
-| --- | --- |
-| **Profit** | **£207,365** |
-| Energy bought / delivered | 14,495 MWh at £34.98 / 13,082 MWh at £54.61 |
-| Equivalent full cycles | 3,443 of 5,000 (the budget does not bind) |
-| Storage volume at the end | 3.86 MWh, from 4.00 nominal |
-
 The model lives in `src/battery_plan/`, the formulation it implements is written
-out section by section in [`docs/model/model.md`](docs/model/model.md), and every
-number quoted in the documents comes from a committed run. On the site, the
+out section by section in [`docs/model/model.md`](docs/model/model.md). On the site, the
 [methodology page](https://batteryplan.gmachado.dev/methodology) renders §1–§6 of
 the same file.
 
@@ -174,7 +154,7 @@ src/battery_plan/     the model: formulation, rolling horizon, cycle-value searc
 services/api/         Go: the HTTP API (Lambda Function URL / plain server) and
                       the DLQ handler
 services/solver/      Python: the SQS-driven solver Lambda and its local poller,
-                      the script that precomputes the 3-year scenario
+                      the script that precomputes a static scenario
 web/                  React 19 + Vite + TypeScript: dashboard, run form,
                       progress, methodology
 contracts/            JSON Schemas shared by Go, Python and TypeScript, their
@@ -187,11 +167,10 @@ infra/local/          LocalStack init script
 docker-compose.yml    the whole back end against LocalStack
 .github/workflows/    CI (Python, Go, web, Terraform) and deploy
 tests/                the Python suite, described in docs/validation.md
-docs/                 the model, its results and experiments, architecture,
+docs/                 the model, architecture,
                       deploy; see "Where to read what" below
-notebooks/, scripts/  the analysis notebook and the measurement runs behind
-                      the documents
-data/raw/             the two spreadsheets supplied with the exercise
+notebooks/, scripts/  the price notebook and the measurement scripts
+data/raw/             local input spreadsheets, not committed
 ```
 
 The Python package file by file is in [`docs/architecture.md`](docs/architecture.md).
@@ -251,14 +230,11 @@ down, what checking found that thinking had not, and what is still open.
 ```mermaid
 flowchart TD
     R["<b>README</b><br/>the problem, the answer, how to run it"]
-    M["<b>docs/model/model.md</b><br/>the formulation · the maths, §1–§7"]
-    D["<b>docs/data.md</b><br/>the two attachments and their quirks"]
+    M["<b>docs/model/model.md</b><br/>the formulation · the maths, §1–§6"]
     A["<b>docs/architecture.md</b><br/>the packages, every file, the decision inside it"]
     S["<b>docs/solve.md</b><br/>what happens in a solve · the rolling horizon"]
     C["<b>docs/cycle-budget.md</b><br/>the one constraint decomposition can get wrong<br/>the λ that fixes it, and the cutting planes<br/>that find it"]
     B["<b>docs/bisection.md</b><br/>the comparison method for that λ"]
-    RE["<b>docs/model/results.md</b><br/>the figures for 2018–2020,<br/>and how to read them"]
-    X["<b>docs/model/cycle-value-experiments.md</b><br/>bisection vs cutting planes, measured<br/>against an exact solve"]
     ST["<b>docs/model/model-stochastic.md</b><br/>the same model with stochastic prices<br/>formulation only"]
     V["<b>docs/validation.md</b><br/>what is checked, what was found, what is open"]
     G["<b>docs/glossary.md</b><br/>every term, the one word chosen for it,<br/>and the words deliberately not used"]
@@ -267,10 +243,7 @@ flowchart TD
 
     R --> G
     R --> M
-    R --> D --> A --> S --> C --> V
-    M --> RE
-    M --> X
-    C --> X
+    R --> A --> S --> C --> V
     C --> B
     M --> ST
     R --> P --> DE
@@ -278,20 +251,15 @@ flowchart TD
 
 | Document | Read it for |
 | --- | --- |
-| [`docs/model/model.md`](docs/model/model.md) | The formulation: objective, constraints, assumptions, numbered §1–§7. Every module cites it. |
-| [`docs/model/results.md`](docs/model/results.md) | §7: profit, energy, cycles and degradation over 2018–2020, year by year, with the reading of them. |
+| [`docs/model/model.md`](docs/model/model.md) | The formulation: objective, constraints, assumptions, numbered §1–§6. Every module cites it. |
 | [`docs/model/model-stochastic.md`](docs/model/model-stochastic.md) | The multistage stochastic extension: scenario tree, non-anticipativity, the cycle cap under uncertainty, mean-CVaR. Formulation only, nothing implemented. |
-| [`docs/data.md`](docs/data.md) | What the two spreadsheets contain, the clock-change artefacts, and why the loader reports rather than repairs. |
 | [`docs/architecture.md`](docs/architecture.md) | How the Python package is structured, every class with the reason it exists, why the constraints are separate blocks, and how two search algorithms share one seam. |
 | [`docs/solve.md`](docs/solve.md) | Why the horizon is decomposed, what one window does, and the evidence that a day of foresight suffices. |
 | [`docs/cycle-budget.md`](docs/cycle-budget.md) | The global cycle cap, the misallocation decomposition causes, valuing cycles instead of splitting them, and how λ is found by the default method: Kelley's cutting planes. |
 | [`docs/bisection.md`](docs/bisection.md) | The second method for the same λ, kept for comparison: what a bisection on cycle use searches for, what it costs, and what it cannot certify. |
-| [`docs/model/cycle-value-experiments.md`](docs/model/cycle-value-experiments.md) | Why a capped pass has no usable gradient, and both search methods measured against exactly solved instances: passes, λ, profit and the dual bound. |
-| [`docs/model/tractability.md`](docs/model/tractability.md) | Solve time against window length, and the whole horizon as one MILP: the measurements behind decomposing it. |
 | [`docs/glossary.md`](docs/glossary.md) | Every term the model, the code and the write-up use, the one word chosen for each idea, and the renames that choice implied. |
 | [`docs/validation.md`](docs/validation.md) | The model's tests, what checking found that thinking had not, and the questions still open. |
 | [`docs/cli.md`](docs/cli.md) | The command line: every flag, the search comparisons, reproducing every figure, the Docker image. |
-| [`notebooks/02_results_analysis.ipynb`](notebooks/02_results_analysis.ipynb) | The dispatch read off the committed plan: every figure in `results.md` re-derived and diffed against the documented value, then the behaviour the prose only asserts — the price landscape, what the plan does with it, where the profit comes from, the cycle budget that did not bind, and the solver evidence. Solves nothing; runs in seconds. |
 | [`contracts/README.md`](contracts/README.md) | The four JSON Schemas, their fields and units, the cross-field rules, the uploaded price format, the params hash. |
 | [`contracts/platform.md`](contracts/platform.md) | What the services share beyond the schemas: the DynamoDB items, the HTTP routes and error codes, submitting, finishing and refunding a run, the local stack, AWS sizing. |
 | [`services/api/README.md`](services/api/README.md), [`services/solver/README.md`](services/solver/README.md), [`web/README.md`](web/README.md) | Each service: its packages or files, its configuration, how to run and test it on its own. |

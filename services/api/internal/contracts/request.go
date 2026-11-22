@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// BundledPricesSHA256 is the content hash of the bundled 2018-2020 prices,
+// BundledPricesSHA256 is the content hash of the bundled prices,
 // battery_plan.contracts.BUNDLED_PRICES_SHA256.
 const BundledPricesSHA256 = "f26dc09b7eb4bcb3755b615c0595132937dee3dbb4b82e915648be7e53a95ce9"
 

@@ -46,10 +46,10 @@ class ModelParameters:
         cycle_budget: float | None = None,
         dt: float = PERIOD_HOURS,
     ) -> ModelParameters:
-        """Build the parameters from Attachment 1.
+        """Build the parameters from the battery spec.
 
         ``cycle_budget`` defaults to the battery's full cycle life, per §5: the
-        brief asks for the profit obtainable over this data, not a valuation
+        goal is the profit obtainable over this data, not a valuation
         over the asset's ten calendar years. Pass
         :func:`prorated_cycle_budget` for the alternative reading.
         """

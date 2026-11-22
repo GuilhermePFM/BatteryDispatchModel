@@ -152,7 +152,7 @@ func newEnv(t *testing.T, limits quota.Limits, perMinute int) *env {
 	e.srv = &Server{
 		DB: db, Queue: e.queue, Objects: e.objects, Presigner: s3.NewPresignClient(s3c),
 		Poster: prices.Poster{Credentials: s3c.Options().Credentials, Region: "eu-west-2", Bucket: "data"},
-		Auth:   auth.NewDev(), Table: table, QueueURL: "q", Bucket: "data", Limits: limits,
+		Auth:   auth.NewDev(), Table: table, QueueURL: "q", Bucket: "data", Limits: limits, BundledPrices: true,
 		Rate: quota.Rate{DB: db, Table: table, PerMinute: perMinute},
 	}
 	hs := httptest.NewServer(e.srv.Handler())

@@ -1,4 +1,4 @@
-import { ArrowRight, Info, WarningCircle } from "@phosphor-icons/react";
+import { ArrowRight, Info } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { Chart } from "../charts/Chart";
@@ -40,7 +40,7 @@ async function loadScenario(): Promise<Scenario> {
     const result = resultOf(example.default);
     if (result) return { state: "ready", result, example: true };
   }
-  return { state: "missing", reason: "The precomputed 2018 to 2020 scenario could not be loaded." };
+  return { state: "missing", reason: "No precomputed scenario is published yet." };
 }
 
 function HeroChart({ result }: { result: Result | null }) {
@@ -100,8 +100,8 @@ export function Home() {
             </p>
             <p>
               Wear is the hard part. Each full cycle uses up some of a finite cycle life, so the model puts a price on a cycle and finds that price by a
-              cutting-plane method on the Lagrangian dual, solving each window with HiGHS. The page below is the full 2018 to 2020 run; the{" "}
-              <Link to="/methodology">methodology</Link> has the formulation, and you can <Link to="/run">run your own battery</Link> on any year.
+              cutting-plane method on the Lagrangian dual, solving each window with HiGHS. The{" "}
+              <Link to="/methodology">methodology</Link> has the formulation, and you can <Link to="/run">run your own battery</Link> on your own prices.
             </p>
           </div>
           {result ? (
@@ -140,7 +140,7 @@ export function Home() {
       <section className="dashboard" aria-labelledby="scenario-title">
         <div className="wrap">
           <div className="dash-head">
-            <h2 id="scenario-title">2018 to 2020, the precomputed run</h2>
+            <h2 id="scenario-title">The precomputed run</h2>
             {result ? (
               <span className="dash-meta">
                 {day(result.horizon.start)} to {day(result.horizon.end)}, solved one day at a time with a day of lookahead
@@ -158,10 +158,10 @@ export function Home() {
           {scenario.state === "loading" ? (
             <div className="chart-placeholder" style={{ height: 240, borderRadius: 14 }} aria-label="Loading the scenario" />
           ) : scenario.state === "missing" ? (
-            <div className="banner error" role="alert">
-              <WarningCircle size={18} aria-hidden="true" />
+            <div className="banner">
+              <Info size={18} aria-hidden="true" />
               <span>
-                <span className="banner-title">{scenario.reason}</span> Reload the page, or <Link to="/run">run a horizon yourself</Link>.
+                <span className="banner-title">{scenario.reason}</span> <Link to="/run">Run a horizon yourself</Link>.
               </span>
             </div>
           ) : (

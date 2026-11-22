@@ -4,7 +4,7 @@
 
     --search NAME   only this method (repeatable; default: every method)
     --no-exact      skip the one-shot MILP, which has no hope past ~90 days
-    --out NAME      CSV to write under docs/model/ (default cycle-value-sweep.csv)
+    --out NAME      CSV to write under data/results/ (default cycle-value-sweep.csv)
 
 For each horizon the cycle budget is set to **half** what the horizon spends
 unpriced, so the cap binds hard and the methods have something to disagree
@@ -12,8 +12,7 @@ about. Where the capped program can be solved whole inside
 :data:`EXACT_TIME_LIMIT`, it is, to give the row a ground truth; otherwise the
 exact column records the status HiGHS stopped at.
 
-Writes its CSV alongside the printed table, the way ``tractability.csv``
-carries the window-length measurements.
+Writes its CSV alongside the printed table.
 """
 
 from __future__ import annotations
@@ -34,7 +33,7 @@ from battery_plan.modelling.periods import build_periods
 from battery_plan.modelling.rolling_horizon import PERIODS_PER_DAY, RollingPolicy
 from battery_plan.modelling.window_problem import build_problem, default_solver
 
-#: Horizons to sweep, in days — the progression of ``tractability.csv``.
+#: Horizons to sweep, in days — a doubling-ish progression.
 DEFAULT_DAYS = (1, 2, 4, 7, 14, 30, 60, 90)
 
 #: Longest the one-shot MILP is given before its row is left without a truth.
@@ -192,7 +191,7 @@ for days in days_to_sweep:
     print(line, flush=True)
     rows.append(row)
 
-out = PROJECT_ROOT / "docs" / "model" / out_name
+out = PROJECT_ROOT / "data" / "results" / out_name
 with out.open("w", newline="") as handle:
     writer = csv.DictWriter(handle, fieldnames=fields)
     writer.writeheader()

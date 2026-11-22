@@ -9,8 +9,6 @@ import { day, num, pct } from "../lib/format";
 import { sha256Hex } from "../lib/sha256";
 import {
   BATTERY_FIELDS,
-  BUNDLED_END,
-  BUNDLED_START,
   buildRequest,
   CYCLE_BUDGET_FIELD,
   defaultValues,
@@ -225,8 +223,8 @@ export function Run() {
     return (e: ChangeEvent<HTMLInputElement>) => setValues((v) => ({ ...v, [key]: e.target.value }));
   }
 
-  const dateMin = fileInfo?.firstDay && !fileInfo.problem ? fileInfo.firstDay : BUNDLED_START;
-  const dateMax = fileInfo?.lastDay && !fileInfo.problem ? fileInfo.lastDay : BUNDLED_END;
+  const dateMin = fileInfo?.firstDay && !fileInfo.problem ? fileInfo.firstDay : undefined;
+  const dateMax = fileInfo?.lastDay && !fileInfo.problem ? fileInfo.lastDay : undefined;
   const busy = phase !== "idle";
 
   return (
@@ -235,7 +233,7 @@ export function Run() {
         <div className="page-head">
           <h1>Run your own battery</h1>
           <p>
-            Change the battery, pick up to a year of the bundled 2018 to 2020 prices or upload your own, and the solver plans every half hour. Its progress shows
+            Change the battery, upload up to a year of prices, and the solver plans every half hour. Its progress shows
             live while it works.
           </p>
         </div>
@@ -244,7 +242,7 @@ export function Run() {
           <div>
             <fieldset className="group">
               <legend>The battery</legend>
-              <p className="group-note">Defaults are the case study&apos;s battery. Losses are fractions: 0.05 loses 5% of the energy on the way in.</p>
+              <p className="group-note">Defaults are a 2 MW / 4 MWh battery. Losses are fractions: 0.05 loses 5% of the energy on the way in.</p>
               <div className="fields">
                 {BATTERY_FIELDS.map((field) => (
                   <NumberField
@@ -305,7 +303,7 @@ export function Run() {
             <fieldset className="group">
               <legend>Prices</legend>
               <p className="group-note">
-                Leave this empty to use the bundled GB prices. Your own file must have the header <code>timestamp,market_1,market_2</code>, one row per half hour
+                Your file must have the header <code>timestamp,market_1,market_2</code>, one row per half hour
                 in £/MWh, and be at most 5 MB.
               </p>
               <div
@@ -361,6 +359,10 @@ export function Run() {
                   <span className="help">
                     {num(fileInfo.size / 1024, 0)} KB, from {day(fileInfo.firstDay)} to {day(fileInfo.lastDay)}. The solver checks every row when the run starts.
                   </span>
+                ) : shown.prices ? (
+                  <span className="error-text" role="alert">
+                    {shown.prices}
+                  </span>
                 ) : (
                   <span className="help">Or drop a file here.</span>
                 )}
@@ -374,7 +376,7 @@ export function Run() {
                 <span>
                   <span className="num">{span ? num(span) : "?"}</span> days, <span className="num">{span ? num(span * 48) : "?"}</span> half hours
                 </span>
-                <span>{file ? `Prices from ${file.name}` : "Bundled 2018 to 2020 prices"}</span>
+                <span>{file ? `Prices from ${file.name}` : "No price file yet"}</span>
               </div>
               {failure ? (
                 <div className="banner error" role="alert">

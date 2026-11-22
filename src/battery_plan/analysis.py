@@ -1,6 +1,6 @@
-"""What a dispatch plan did, read off its columns (§7).
+"""What a dispatch plan did, read off its columns.
 
-The readings of ``notebooks/02_results_analysis.py``, as functions: the price
+The readings of a plan, as functions: the price
 landscape the plan was handed, what it did with it, where the profit came
 from, the cycles it spent, and which reading of "the day's spread" explains
 its daily profit. Each one is a pure function of the plan frame of
@@ -126,7 +126,7 @@ def daily_summary(plan: pd.DataFrame, params: ModelParameters) -> pd.DataFrame:
     perfect cycle of the nominal volume, bought at the day's floor and sold at
     its ceiling over both markets — not a bound, since it ignores the rate
     limits, the hourly commitment and the cycle cap, but the order-of-magnitude
-    check ``results.md`` uses.
+    check.
     """
     frame = _derived(plan)
     day = _day(frame)
@@ -166,7 +166,7 @@ def daily_summary(plan: pd.DataFrame, params: ModelParameters) -> pd.DataFrame:
 
 
 def headline_figures(plan: pd.DataFrame, params: ModelParameters) -> pd.Series:
-    """:func:`~battery_plan.modelling.plan.summarise`, plus what ``results.md`` derives from it."""
+    """:func:`~battery_plan.modelling.plan.summarise`, plus what is derived from it."""
     figures = summarise(plan, params)
     figures["periods_idle"] = int(
         figures["periods"] - figures["periods_charging"] - figures["periods_discharging"]
@@ -330,7 +330,7 @@ def monthly_profit(plan: pd.DataFrame) -> pd.Series:
 
 
 def yearly_summary(plan: pd.DataFrame, daily: pd.DataFrame) -> pd.DataFrame:
-    """Year by year, as ``results.md`` tables it, with the spread that explains it."""
+    """Year by year, with the spread that explains it."""
     stamps = pd.DatetimeIndex(plan.index)
     years = plan.groupby(stamps.year)
     closing = years["cycles"].last()

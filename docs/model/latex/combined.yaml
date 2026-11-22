@@ -8,7 +8,7 @@ subtitle: Deterministic and stochastic formulations
 author: Guilherme Machado
 abstract: |
   The two formulations of the battery dispatch problem in one document: the
-  deterministic mixed-integer program solved over 2018--2020 with perfect
+  deterministic mixed-integer program solved with perfect
   foresight, and its multistage stochastic counterpart over a scenario tree.
   Part I states the model, its solution approach and the rolling-window
   decomposition; Part II drops the assumption that prices are known in
