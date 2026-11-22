@@ -20,13 +20,13 @@ import time
 
 import pulp
 
-from battery_case.data_io.loaders import load_battery_spec, load_market_prices
-from battery_case.modelling.cycle_value.oracle import CycleOracle
-from battery_case.modelling.cycle_value.searches import SEARCHES
-from battery_case.modelling.parameters import ModelParameters
-from battery_case.modelling.periods import build_periods
-from battery_case.modelling.rolling_horizon import PERIODS_PER_DAY, RollingPolicy
-from battery_case.modelling.window_problem import build_problem, default_solver
+from battery_plan.data_io.loaders import load_battery_spec, load_market_prices
+from battery_plan.modelling.cycle_value.oracle import CycleOracle
+from battery_plan.modelling.cycle_value.searches import SEARCHES
+from battery_plan.modelling.parameters import ModelParameters
+from battery_plan.modelling.periods import build_periods
+from battery_plan.modelling.rolling_horizon import PERIODS_PER_DAY, RollingPolicy
+from battery_plan.modelling.window_problem import build_problem, default_solver
 
 #: Above this, one MILP over the whole instance is not worth waiting for (§6).
 EXACT_LIMIT_DAYS = 30

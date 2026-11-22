@@ -1,0 +1,7 @@
+# Toolchain do projeto: `mise install` deixa tudo na versão certa.
+# Python e as dependências dele continuam com o uv (pyproject.toml + uv.lock).
+[tools]
+node = "24.22.3"
+pnpm = "12.21.0"
+go = "1.27.4"
+terraform = "1.17.2"

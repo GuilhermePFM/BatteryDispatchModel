@@ -2,7 +2,7 @@
 
     uv run python scripts/results_figures.py [plan.csv]
 
-The headline table of §7 is printed by ``battery-case dispatch`` itself; the
+The headline table of §7 is printed by ``battery-plan dispatch`` itself; the
 rest of that document — the market split, the year-by-year progression, the
 perfect-foresight yardstick, and what capex would do to the answer — is prose
 around numbers nothing re-derived. This script re-derives them, from
@@ -20,10 +20,10 @@ import sys
 
 import pandas as pd
 
-from battery_case.data_io.loaders import load_battery_spec
-from battery_case.data_io.paths import RESULTS_DIR
-from battery_case.modelling.parameters import ModelParameters
-from battery_case.modelling.plan import summarise
+from battery_plan.data_io.loaders import load_battery_spec
+from battery_plan.data_io.paths import RESULTS_DIR
+from battery_plan.modelling.parameters import ModelParameters
+from battery_plan.modelling.plan import summarise
 
 #: Volume of the one ideal daily cycle the yardstick of §7 trades (MWh).
 #:
@@ -86,7 +86,7 @@ try:
     plan = pd.read_csv(plan_path, index_col=0, parse_dates=True)
 except FileNotFoundError:
     raise SystemExit(
-        f"no plan at {plan_path}\nsolve one first:  uv run battery-case dispatch"
+        f"no plan at {plan_path}\nsolve one first:  uv run battery-plan dispatch"
     ) from None
 
 figures = summarise(plan, params)

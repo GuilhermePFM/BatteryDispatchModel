@@ -30,7 +30,7 @@ inflated by 3–4% and are not the ones quoted here.
 ## The settings that came out fastest
 
 Now the default in `default_solver`, as
-`battery_case.modelling.window_problem.TUNED_OPTIONS`:
+`battery_plan.modelling.window_problem.TUNED_OPTIONS`:
 
 ```python
 pulp.HiGHS(

@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #   kernelspec:
-#     display_name: battery-case
+#     display_name: battery-plan
 #     language: python
 #     name: python3
 # ---
@@ -24,8 +24,8 @@
 import matplotlib.pyplot as plt
 from IPython import get_ipython
 
-from battery_case import load_battery_spec, load_market_prices
-from battery_case.data_io import price_quality_report
+from battery_plan import load_battery_spec, load_market_prices
+from battery_plan.data_io import price_quality_report
 
 # Reload the package on edit, when running under an IPython kernel. Spelled out
 # rather than as %load_ext so this file stays importable, lintable Python.

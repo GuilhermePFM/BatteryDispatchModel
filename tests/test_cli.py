@@ -8,8 +8,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from battery_case.cli import main
-from battery_case.data_io.paths import BATTERY_SPEC_XLSX, MARKET_PRICES_XLSX
+from battery_plan.cli import main
+from battery_plan.data_io.paths import BATTERY_SPEC_XLSX, MARKET_PRICES_XLSX
 
 requires_spreadsheets = pytest.mark.skipif(
     not (BATTERY_SPEC_XLSX.exists() and MARKET_PRICES_XLSX.exists()),
@@ -58,8 +58,14 @@ def test_quiet_keeps_the_result_on_stdout_and_says_nothing_on_stderr(
     """``> summary.txt`` must still capture the answer, whatever the progress mode."""
     out = tmp_path / "plan.csv"
     argv = [
-        "dispatch", "--start", "2018-01-01", "--end", "2018-01-01",
-        "--out", str(out), "--quiet",
+        "dispatch",
+        "--start",
+        "2018-01-01",
+        "--end",
+        "2018-01-01",
+        "--out",
+        str(out),
+        "--quiet",
     ]
     assert main(argv) == 0
 
@@ -75,8 +81,15 @@ def test_json_progress_writes_parsable_events_to_stderr(
     """A sweep should be able to replay a run's convergence without re-running it."""
     out = tmp_path / "plan.csv"
     argv = [
-        "dispatch", "--start", "2018-01-01", "--end", "2018-01-01",
-        "--out", str(out), "--progress", "json",
+        "dispatch",
+        "--start",
+        "2018-01-01",
+        "--end",
+        "2018-01-01",
+        "--out",
+        str(out),
+        "--progress",
+        "json",
     ]
     assert main(argv) == 0
 

@@ -1,0 +1,155 @@
+# Builds the three functions, applies infra/aws, then publishes the SPA built
+# against the applied stack. Setup and the GitHub secrets and variables it reads
+# are in docs/deploy.md.
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # OIDC: the deploy role trusts this repository's main branch
+
+# One deploy at a time, never cancelled half-way through an apply.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  solver-image:
+    # Native arm64 build: the solver Lambda runs on Graviton.
+    runs-on: ubuntu-24.04-arm
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - uses: docker/setup-buildx-action@v4
+      - id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: services/solver/Dockerfile
+          target: lambda
+          platforms: linux/arm64
+          push: true
+          # Tags are immutable in the repository; a re-run gets its own tag.
+          tags: ${{ steps.ecr.outputs.registry }}/batteryplan-solver:${{ github.sha }}-${{ github.run_attempt }}
+          # Lambda takes a single-platform image manifest, not an index carrying
+          # attestations.
+          provenance: false
+          sbom: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  api-zips:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+        with:
+          install_args: go
+      - run: make zips
+        working-directory: services/api
+      - uses: actions/upload-artifact@v7
+        with:
+          name: api-zips
+          path: services/api/dist/*.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  deploy:
+    needs: [solver-image, api-zips]
+    runs-on: ubuntu-latest
+    env:
+      TF_IN_AUTOMATION: "1"
+      TF_INPUT: "0"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: api-zips
+          path: services/api/dist
+      - uses: jdx/mise-action@v5
+        with:
+          install_args: terraform node pnpm
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: terraform apply
+        working-directory: infra/aws
+        # The inputs, secrets among them, only where Terraform reads them: the
+        # later steps run pnpm install and the build.
+        env:
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+          TF_VAR_solver_image_digest: ${{ needs.solver-image.outputs.digest }}
+          TF_VAR_api_zip: ${{ github.workspace }}/services/api/dist/api.zip
+          TF_VAR_dlq_zip: ${{ github.workspace }}/services/api/dist/dlq.zip
+          TF_VAR_google_client_id: ${{ vars.GOOGLE_CLIENT_ID }}
+          TF_VAR_google_client_secret: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          TF_VAR_linkedin_client_id: ${{ vars.LINKEDIN_CLIENT_ID }}
+          TF_VAR_linkedin_client_secret: ${{ secrets.LINKEDIN_CLIENT_SECRET }}
+          TF_VAR_linkedin_oidc_issuer: ${{ vars.LINKEDIN_OIDC_ISSUER || 'https://www.linkedin.com/oauth' }}
+          TF_VAR_budget_email: ${{ secrets.BUDGET_EMAIL }}
+          # Phase 6, all optional (docs/deploy.md, "Custom domain").
+          TF_VAR_site_domain: ${{ vars.SITE_DOMAIN }}
+          TF_VAR_site_domain_attach: ${{ vars.SITE_DOMAIN_ATTACH || 'false' }}
+          TF_VAR_auth_domain: ${{ vars.AUTH_DOMAIN }}
+          TF_VAR_auth_domain_attach: ${{ vars.AUTH_DOMAIN_ATTACH || 'false' }}
+        run: |
+          terraform init -backend-config="bucket=$TF_STATE_BUCKET"
+          terraform apply -auto-approve
+
+      - name: read stack outputs
+        working-directory: infra/aws
+        run: |
+          # Assignments, not $(...) inside echo, so a failed read fails the step.
+          vite_env=$(terraform output -json vite_env | jq -r 'to_entries[] | "\(.key)=\(.value)"')
+          site_bucket=$(terraform output -raw site_bucket)
+          distribution_id=$(terraform output -raw distribution_id)
+          site_url=$(terraform output -raw site_url)
+          {
+            echo "$vite_env"
+            echo "SITE_BUCKET=$site_bucket"
+            echo "DISTRIBUTION_ID=$distribution_id"
+            echo "SITE_URL=$site_url"
+          } >> "$GITHUB_ENV"
+
+      - name: build the SPA
+        working-directory: web
+        env:
+          VITE_REPO_URL: ${{ github.server_url }}/${{ github.repository }}/blob/main
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      # Hashed assets are immutable and never deleted, so a tab still holding
+      # the previous index.html keeps loading; everything else is short-lived
+      # and index.html is revalidated on every load.
+      - name: publish
+        working-directory: web/dist
+        run: |
+          aws s3 sync assets "s3://$SITE_BUCKET/assets" \
+            --cache-control "public, max-age=31536000, immutable"
+          aws s3 sync . "s3://$SITE_BUCKET" --delete \
+            --exclude "assets/*" --exclude "index.html" \
+            --cache-control "public, max-age=300"
+          aws s3 cp index.html "s3://$SITE_BUCKET/index.html" \
+            --cache-control "no-cache"
+          # Every client-side route is cached under /index.html (the
+          # spa-rewrite function), so that one path is enough.
+          aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION_ID" \
+            --paths "/index.html" --query Invalidation.Id --output text
+          echo "Deployed to $SITE_URL" >> "$GITHUB_STEP_SUMMARY"

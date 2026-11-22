@@ -1,0 +1,90 @@
+# The whole back end on one machine, against LocalStack (contracts/platform.md,
+# "Local stack"):
+#
+#   docker compose up --build
+#
+# The SPA runs on the host (`pnpm dev` in web/), proxying /api to :8080.
+#
+# Every service reaches LocalStack as localhost.localstack.cloud, a public name
+# that resolves to 127.0.0.1: inside the compose network it is an alias of the
+# localstack container, and on the host it reaches the published port, so a
+# presigned URL the API signs works from the browser too.
+
+x-aws: &aws
+  AWS_ENDPOINT_URL: http://localhost.localstack.cloud:4566
+  AWS_REGION: eu-west-2
+  AWS_DEFAULT_REGION: eu-west-2
+  AWS_ACCESS_KEY_ID: test
+  AWS_SECRET_ACCESS_KEY: test
+  TABLE_NAME: batteryplan
+  DATA_BUCKET: batteryplan-data
+
+x-queues:
+  - &queue-url http://localhost.localstack.cloud:4566/000000000000/batteryplan-jobs
+  - &dlq-url http://localhost.localstack.cloud:4566/000000000000/batteryplan-jobs-dlq
+
+services:
+  localstack:
+    image: localstack/localstack:4.9
+    ports:
+      - "127.0.0.1:4566:4566"
+    environment:
+      SERVICES: dynamodb,sqs,s3
+      AWS_DEFAULT_REGION: eu-west-2
+    volumes:
+      - ./infra/local/init-aws.sh:/etc/localstack/init/ready.d/init-aws.sh:ro
+    healthcheck:
+      # The init script's last step: once the CORS rule is there, all of it is.
+      test: ["CMD", "awslocal", "s3api", "get-bucket-cors", "--bucket", "batteryplan-data"]
+      interval: 2s
+      timeout: 10s
+      retries: 60
+    networks:
+      default:
+        aliases:
+          - localhost.localstack.cloud
+          - s3.localhost.localstack.cloud
+          - batteryplan-data.s3.localhost.localstack.cloud
+
+  api:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+      target: local
+    ports:
+      - "8080:8080"
+    environment:
+      <<: *aws
+      QUEUE_URL: *queue-url
+      AUTH_MODE: dev
+      DAILY_USER_LIMIT: "3"
+      DAILY_GLOBAL_LIMIT: "60"
+      IP_RATE_PER_MINUTE: "60"
+    depends_on:
+      localstack:
+        condition: service_healthy
+
+  dlq:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+      target: local
+    command: ["/dlq"]
+    environment:
+      <<: *aws
+      DLQ_URL: *dlq-url
+    depends_on:
+      localstack:
+        condition: service_healthy
+
+  solver:
+    build:
+      context: .
+      dockerfile: services/solver/Dockerfile
+      target: local
+    environment:
+      <<: *aws
+      QUEUE_URL: *queue-url
+    depends_on:
+      localstack:
+        condition: service_healthy

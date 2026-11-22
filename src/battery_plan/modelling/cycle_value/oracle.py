@@ -1,0 +1,287 @@
+"""The seam between valuing a cycle and the method that finds the value (§6).
+
+The cycle budget of §4.6 is the one constraint that couples distant windows, and
+it is handled by valuing rather than splitting: a cycle value ``λ`` per
+equivalent full cycle enters each window's objective, and the value that rations
+the budget across the horizon is its shadow price. *Finding* that value is a
+search over a scalar, and there is more than one way to run it, so the search is
+a strategy (:class:`DualSearch`) rather than a function.
+
+What every method shares is the expensive part. One evaluation is one pass of
+the rolling policy over the whole horizon — about 77 seconds on this data —
+and a method is judged by how many passes it spends. :class:`CycleOracle` owns
+that primitive, memoises it, and counts the passes it serves, so the count is
+measured in one place rather than asserted by each method.
+
+What the methods do *not* share is the subproblem. A method that reads a
+subgradient needs the cap removed and replaced by the cycle value
+(:data:`~battery_plan.modelling.constraints.UNCAPPED_BLOCKS`), because a window
+that still caps the count reports the same clipped number at every λ and so no
+usable slope; a method that reads only "was the budget exhausted" needs the cap
+in place. The ``relaxed`` flag on :meth:`CycleOracle.at` is therefore the
+method's own choice, which is why a search is a search rule *and* a relaxation.
+"""
+
+from __future__ import annotations
+
+import time
+from collections.abc import Callable
+from dataclasses import dataclass, field, replace
+from typing import Protocol
+
+import pandas as pd
+
+from battery_plan.modelling.constraints import DEFAULT_BLOCKS, UNCAPPED_BLOCKS
+from battery_plan.modelling.parameters import ModelParameters
+from battery_plan.modelling.periods import SettlementPeriods
+from battery_plan.modelling.rolling_horizon import RollingPolicy
+from battery_plan.reporting import NullReporter, PassReport, Reporter
+
+#: Fraction of the budget that may go unspent while it still counts as used up.
+SPENT_TOLERANCE = 1e-3
+
+#: How much longer than the slowest pass so far the next one is allowed to
+#: take, when a deadline decides whether there is time for it.
+PASS_SAFETY = 1.5
+
+#: Why a search stopped before its own criterion said so: the deadline left
+#: too little time for another pass and the one that recovers a plan.
+STOPPED_FOR_TIME = "time_limit"
+
+
+@dataclass(frozen=True, slots=True)
+class DualPoint:
+    """One pass at one cycle value: everything either method could read from it.
+
+    ``index`` and ``elapsed`` are facts about the pass rather than about the
+    dual — which pass produced the point, and what it cost — and they are here
+    so a cached point can say which pass it was originally served from.
+
+    ``lagrangian`` is ``L(λ)`` of §6 and ``subgradient`` is its exact
+    subgradient *provided the pass maximised the relaxed problem* — which a
+    rolling pass with finite lookahead only approximates, and which is why a
+    bound quoted from these points is sound only as far as that approximation
+    holds. A point taken from a capped pass carries a subgradient that is zero
+    wherever the cap binds, and is no use to a method that differentiates.
+    """
+
+    cycle_value: float
+    lagrangian: float
+    subgradient: float
+    profit: float
+    cycles: float
+    plan: pd.DataFrame
+    relaxed: bool
+    within_budget: bool
+    index: int = 0
+    elapsed: float = 0.0
+
+    @property
+    def cut(self) -> tuple[float, float, float]:
+        """The cut ``L(λ) >= lagrangian + subgradient (λ - cycle_value)`` of §6."""
+        return self.cycle_value, self.lagrangian, self.subgradient
+
+
+@dataclass(frozen=True, slots=True)
+class DualBound:
+    """An upper bound on the constrained optimum, with the gap that earns it.
+
+    ``lagrangian`` is the best ``L(λ)`` evaluated, an upper bound on the optimum
+    by weak duality; ``envelope`` is the cuts' envelope minimum, a lower bound
+    on the dual optimum. The two bracket ``min_λ L(λ)``, and the gap between
+    them is what the search terminates on.
+    """
+
+    lagrangian: float
+    envelope: float
+
+    @property
+    def gap(self) -> float:
+        return self.lagrangian - self.envelope
+
+    @property
+    def relative_gap(self) -> float:
+        return self.gap / abs(self.lagrangian) if self.lagrangian else 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class DualSearchResult:
+    """What a search returns: a cycle value, a deliverable plan, and its cost.
+
+    ``bound`` is ``None`` when the method has nothing to certify with — the
+    absence of a certificate is a type here rather than a sentinel number, so a
+    report cannot quote a bound a method never computed. ``stop_reason`` is
+    ``None`` when the method stopped on its own terms, and
+    :data:`STOPPED_FOR_TIME` when the deadline cut it short; the plan is
+    deliverable either way, and the bound says how far from optimal it can be.
+    """
+
+    cycle_value: float
+    plan: pd.DataFrame
+    profit: float
+    cycles: float
+    passes: int
+    bound: DualBound | None = None
+    stop_reason: str | None = None
+
+    @property
+    def stopped_early(self) -> bool:
+        return self.stop_reason is not None
+
+
+@dataclass(frozen=True, slots=True)
+class CycleOracle:
+    """One rolling pass at one cycle value, memoised and counted.
+
+    The policy is the window scheme of §6; the oracle only ever varies the
+    cycle value and the constraints, which is why both are fields of a frozen
+    dataclass and a pass is a :func:`~dataclasses.replace` away.
+
+    It is also where a pass is *announced*. Every method goes through
+    :meth:`at`, so wiring the ``reporter`` here reports both methods and any
+    later one for free, and a cache hit is reported as a cache hit rather than
+    as a pass that finished implausibly fast.
+
+    ``deadline`` is a reading of ``clock`` (:func:`time.perf_counter` unless a
+    test injects its own) by which the search should have returned its plan,
+    or ``None`` for no limit. The oracle times its passes on the same clock,
+    so :meth:`can_afford` compares like with like.
+    """
+
+    settlement: SettlementPeriods
+    params: ModelParameters
+    policy: RollingPolicy = field(default_factory=RollingPolicy)
+    reporter: Reporter = field(default_factory=NullReporter, repr=False, compare=False)
+    deadline: float | None = field(default=None, compare=False)
+    clock: Callable[[], float] = field(default=time.perf_counter, repr=False, compare=False)
+    _points: list[DualPoint] = field(default_factory=list, repr=False, compare=False)
+    _reported: set[int] = field(default_factory=set, repr=False, compare=False)
+    _cache: dict[tuple[float, bool], DualPoint] = field(
+        default_factory=dict, repr=False, compare=False
+    )
+
+    @property
+    def budget(self) -> float:
+        """The cycle budget being valued, ``B`` in the dual of §6."""
+        return self.params.cycle_budget
+
+    @property
+    def passes(self) -> int:
+        """Passes solved so far — the cost of the search, in ten-minute units."""
+        return len(self._points)
+
+    @property
+    def points(self) -> tuple[DualPoint, ...]:
+        """Every pass solved, in the order it was asked for."""
+        return tuple(self._points)
+
+    def can_afford(self, passes: int) -> bool:
+        """Whether ``passes`` more passes fit before the deadline.
+
+        A pass is estimated at :data:`PASS_SAFETY` times the slowest one so
+        far, so the test is ``remaining >= PASS_SAFETY * passes * slowest``.
+        With no deadline, or no pass yet to estimate from, the answer is yes:
+        a search cannot return a plan without spending at least one pass.
+        """
+        if self.deadline is None or not self._points:
+            return True
+        slowest = max(point.elapsed for point in self._points)
+        return self.deadline - self.clock() >= PASS_SAFETY * passes * slowest
+
+    def at(self, cycle_value: float, *, relaxed: bool, label: str = "") -> DualPoint:
+        """Dispatch the horizon charged ``cycle_value`` per cycle, and read the pass.
+
+        ``relaxed`` drops the cycle budget from the model, leaving the cycle
+        value as the only thing standing between the battery and spending every
+        cycle it can. A capped pass keeps the budget, so its plan is deliverable
+        as it stands and its subgradient is uninformative.
+
+        ``label`` is how the pass describes itself while it runs — ``relaxed``,
+        ``capped``, ``recovery`` — and reaches the reporter, not the model.
+        """
+        key = (cycle_value, relaxed)
+        if key in self._cache:
+            return self._cache[key]
+
+        self.reporter.pass_started(self.passes + 1, cycle_value, relaxed=relaxed, label=label)
+        point = self._solve(cycle_value, relaxed=relaxed)
+        self._cache[key] = point
+        self._points.append(point)
+        return point
+
+    def pass_report(
+        self,
+        point: DualPoint,
+        *,
+        gap: float | None = None,
+        recovery: bool = False,
+    ) -> PassReport:
+        """The shared half of a table row, for a method to finish and report.
+
+        The columns here come off the point whatever found it; the ones that
+        differ between methods are the method's own, which is why this returns
+        a report rather than a line of text.
+
+        A point reported a second time was served from the cache: the method
+        asked for a cycle value it had already spent a pass on, and the row
+        should say so rather than imply a pass that took no time.
+        """
+        cached = point.index in self._reported
+        self._reported.add(point.index)
+        return PassReport(
+            index=point.index,
+            cycle_value=point.cycle_value,
+            relaxed=point.relaxed,
+            profit=point.profit,
+            cycles=point.cycles,
+            budget=self.budget,
+            lagrangian=point.lagrangian,
+            subgradient=point.subgradient,
+            within_budget=point.within_budget,
+            elapsed=point.elapsed,
+            cached=cached,
+            recovery=recovery,
+            gap=gap,
+        )
+
+    def _solve(self, cycle_value: float, *, relaxed: bool) -> DualPoint:
+        policy = replace(
+            self.policy,
+            cycle_value=cycle_value,
+            blocks=UNCAPPED_BLOCKS if relaxed else DEFAULT_BLOCKS,
+            on_window=(
+                self.policy.on_window
+                if self.policy.on_window is not None
+                else self.reporter.window_done
+            ),
+        )
+        started = self.clock()
+        plan = policy.dispatch(self.settlement, self.params)
+        elapsed = self.clock() - started
+
+        profit = float(plan["net_revenue_gbp"].sum())
+        cycles = float(plan["cycles"].iloc[-1])
+        return DualPoint(
+            cycle_value=cycle_value,
+            lagrangian=profit - cycle_value * (cycles - self.budget),
+            subgradient=self.budget - cycles,
+            profit=profit,
+            cycles=cycles,
+            plan=plan,
+            relaxed=relaxed,
+            within_budget=cycles <= self.budget * (1.0 + SPENT_TOLERANCE),
+            index=self.passes + 1,
+            elapsed=elapsed,
+        )
+
+
+class DualSearch(Protocol):
+    """A way of finding the value per cycle that rations the budget (§6)."""
+
+    def search(self, oracle: CycleOracle) -> DualSearchResult:
+        """Search for the cycle value, spending oracle passes, and return a plan.
+
+        The plan returned must respect the budget: a relaxed pass is an
+        evaluation, not a deliverable.
+        """
+        ...

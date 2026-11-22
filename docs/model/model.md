@@ -469,6 +469,20 @@ The loop therefore terminates on a measured gap, $\min_i L(\lambda_i) -
 \theta^\star_k \leq \text{tol}$, rather than on an iteration count. The gap at
 exit is a statement about the quality of the answer, not of the price alone.
 
+A rolling pass only approximates the maximiser of the relaxed problem, so the
+plan from one pass can beat another pass at that pass's own $\lambda_i$. The
+value read at $\lambda_i$ is therefore the cuts' envelope there,
+$\max_j L(\lambda_j) + g_j(\lambda_i - \lambda_j)$, rather than the pass's own
+$L(\lambda_i)$: every plan solved is feasible at every $\lambda$, so the
+envelope is the better estimate. That way the upper bound never falls below
+$\theta^\star_k$, and the gap is never negative.
+
+A web run also has a deadline. Before each pass the search checks that the
+time left covers that pass and the recovery pass after it, each costed at 1.5
+times the slowest pass so far. When it does not, the search stops and recovers
+at the best $\lambda$ found, and the gap it has reached so far is reported with
+the plan.
+
 Two further elements are needed to make it an algorithm that returns a
 plan:
 
@@ -496,7 +510,7 @@ approximates, so a bound quoted from decomposed evaluations is sound only as far
 as that approximation holds.
 
 Both methods are implemented and both are selectable with
-`battery-case dispatch --search {cutting-plane,bisection}`, cutting planes
+`battery-plan dispatch --search {cutting-plane,bisection}`, cutting planes
 being the default: it costs fewer passes and returns the bound above. They share
 one evaluation oracle and differ in the subproblem they ask it for: bisection
 reads one bit from a *capped* pass, the cutting-plane method a value and a

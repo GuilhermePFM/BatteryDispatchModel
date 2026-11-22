@@ -1,0 +1,76 @@
+"""The way a calibrated run reaches the CLI (§6).
+
+:class:`CalibratedPolicy` adapts a search to the ``DispatchPolicy`` protocol, so
+that a calibrated run is still "prices in, plan out" as far as
+:func:`~battery_plan.modelling.plan.summarise`, the CLI and the notebooks
+are concerned. Which method it runs comes from
+:mod:`~battery_plan.modelling.cycle_value.searches`; what the method does with the
+horizon is :mod:`~battery_plan.modelling.cycle_value.oracle`.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+import pandas as pd
+
+from battery_plan.data_models import BatterySpec, MarketPrices
+from battery_plan.modelling.cycle_value.oracle import CycleOracle, DualSearch, DualSearchResult
+from battery_plan.modelling.cycle_value.searches import DEFAULT_SEARCH, SEARCHES
+from battery_plan.modelling.parameters import ModelParameters
+from battery_plan.modelling.periods import SettlementPeriods, build_periods
+from battery_plan.modelling.rolling_horizon import RollingPolicy
+from battery_plan.reporting import NullReporter, Reporter
+
+
+@dataclass(frozen=True, slots=True)
+class CalibratedPolicy:
+    """Value the cycle budget, then dispatch at that value. Implements ``DispatchPolicy``.
+
+    :meth:`run` satisfies the protocol and returns the plan alone;
+    :meth:`calibrate_and_dispatch` returns the whole :class:`DualSearchResult`,
+    which is what a caller wanting the cycle value, the pass count or the dual
+    bound should use. The dataclass is frozen, so the result is returned rather
+    than stashed on the instance.
+    """
+
+    search: DualSearch = SEARCHES[DEFAULT_SEARCH]
+    policy: RollingPolicy = field(default_factory=RollingPolicy)
+    reporter: Reporter = field(default_factory=NullReporter, repr=False)
+
+    def run(self, spec: BatterySpec, prices: MarketPrices) -> pd.DataFrame:
+        """Dispatch against both price series, from the raw inputs."""
+        settlement = build_periods(prices)
+        return self.calibrate_and_dispatch(settlement, ModelParameters.from_spec(spec)).plan
+
+    def oracle_for(
+        self,
+        settlement: SettlementPeriods,
+        params: ModelParameters,
+        *,
+        deadline: float | None = None,
+    ) -> CycleOracle:
+        """The oracle this policy would spend passes on.
+
+        Handing it out is what lets a caller survive an interruption: the
+        oracle holds every pass solved so far, so a run stopped halfway still
+        has a best plan to write. ``deadline`` is a :func:`time.perf_counter`
+        reading the search should finish by (:meth:`CycleOracle.can_afford`).
+        """
+        return CycleOracle(
+            settlement=settlement,
+            params=params,
+            policy=self.policy,
+            reporter=self.reporter,
+            deadline=deadline,
+        )
+
+    def calibrate_and_dispatch(
+        self,
+        settlement: SettlementPeriods,
+        params: ModelParameters,
+        *,
+        oracle: CycleOracle | None = None,
+    ) -> DualSearchResult:
+        """Run the search over a prepared axis and return everything it found."""
+        return self.search.search(oracle or self.oracle_for(settlement, params))

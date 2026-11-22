@@ -5,8 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from battery_case.modelling.parameters import ModelParameters
-from battery_case.modelling.plan import COLUMNS, build_plan, effective_volume, summarise
+from battery_plan.modelling.parameters import ModelParameters
+from battery_plan.modelling.plan import COLUMNS, build_plan, effective_volume, summarise
 from tests.helpers import SPEC, make_periods
 
 

@@ -1,0 +1,76 @@
+# Checks for every pull request and every push. No AWS access: the deploy
+# role trusts main only (infra/bootstrap).
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Python 3.12 from .python-version, dependencies from uv.lock.
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          version: "0.13.4"
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run mypy
+      - run: uv run pytest
+
+  go:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/api
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+        with:
+          install_args: go
+      - run: go vet ./...
+      # The DynamoDB tests start amazon/dynamodb-local; the runner has docker.
+      - run: go test ./...
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+      # node and pnpm from mise.toml; pnpm matches web/package.json packageManager.
+      - uses: jdx/mise-action@v5
+        with:
+          install_args: node pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm test
+      # Reads ../contracts and ../docs/model, hence the full checkout.
+      - run: pnpm build
+
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+        with:
+          install_args: terraform
+      - run: terraform fmt -check -recursive infra
+      - name: validate
+        run: |
+          for dir in infra/bootstrap infra/aws; do
+            terraform -chdir="$dir" init -backend=false -input=false
+            terraform -chdir="$dir" validate
+          done

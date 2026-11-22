@@ -12,7 +12,7 @@ import math
 import pulp
 import pytest
 
-from battery_case.modelling.constraints import (
+from battery_plan.modelling.constraints import (
     DEFAULT_BLOCKS,
     ConstraintBlock,
     cycle_accounting,
@@ -23,10 +23,10 @@ from battery_case.modelling.constraints import (
     profit_objective,
     volume_limit,
 )
-from battery_case.modelling.parameters import ModelParameters
-from battery_case.modelling.periods import SettlementPeriods
-from battery_case.modelling.variables import DispatchVariables, ModelContext
-from battery_case.modelling.window_problem import build_problem
+from battery_plan.modelling.parameters import ModelParameters
+from battery_plan.modelling.periods import SettlementPeriods
+from battery_plan.modelling.variables import DispatchVariables, ModelContext
+from battery_plan.modelling.window_problem import build_problem
 from tests.helpers import SPEC, make_periods
 
 #: Four hours of half-hourly periods — long enough for §4.5 to bite.

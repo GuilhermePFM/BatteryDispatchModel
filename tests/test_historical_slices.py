@@ -36,13 +36,13 @@ import pandas as pd
 import pulp
 import pytest
 
-from battery_case.data_io.loaders import load_battery_spec, load_market_prices
-from battery_case.data_io.paths import BATTERY_SPEC_XLSX, MARKET_PRICES_XLSX
-from battery_case.modelling.parameters import ModelParameters
-from battery_case.modelling.periods import SettlementPeriods, build_periods
-from battery_case.modelling.plan import summarise
-from battery_case.modelling.rolling_horizon import PERIODS_PER_DAY, RollingPolicy
-from battery_case.modelling.window_problem import build_problem
+from battery_plan.data_io.loaders import load_battery_spec, load_market_prices
+from battery_plan.data_io.paths import BATTERY_SPEC_XLSX, MARKET_PRICES_XLSX
+from battery_plan.modelling.parameters import ModelParameters
+from battery_plan.modelling.periods import SettlementPeriods, build_periods
+from battery_plan.modelling.plan import summarise
+from battery_plan.modelling.rolling_horizon import PERIODS_PER_DAY, RollingPolicy
+from battery_plan.modelling.window_problem import build_problem
 from tests.helpers import TOLERANCE, assert_feasible
 
 pytestmark = pytest.mark.skipif(
@@ -114,7 +114,7 @@ def cut(settlement: SettlementPeriods, case: Slice) -> SettlementPeriods:
 
     Sliced by position rather than by label: every day of the horizon holds
     exactly 48 Market 1 rows, which the clock-change labels do not (§ the
-    module docstring of :mod:`battery_case.modelling.periods`).
+    module docstring of :mod:`battery_plan.modelling.periods`).
     """
     start = int(settlement.timestamps.searchsorted(case.start))
     assert start % PERIODS_PER_DAY == 0, f"{case.start} is not a day boundary"

@@ -1,0 +1,10 @@
+# The build context is the repo root; the image needs only these.
+*
+!pyproject.toml
+!uv.lock
+!src/battery_plan/
+!data/raw/attachment_2_market_prices.xlsx
+!contracts/*.schema.json
+!services/solver/handler.py
+!services/solver/local_worker.py
+**/__pycache__

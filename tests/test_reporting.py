@@ -16,13 +16,13 @@ from dataclasses import replace
 import pandas as pd
 import pytest
 
-from battery_case.modelling.cycle_value.bisection import BisectionSearch
-from battery_case.modelling.cycle_value.cutting_plane import CuttingPlaneSearch
-from battery_case.modelling.cycle_value.oracle import CycleOracle
-from battery_case.modelling.parameters import ModelParameters
-from battery_case.modelling.periods import SettlementPeriods
-from battery_case.modelling.rolling_horizon import RollingPolicy, WindowProgress
-from battery_case.reporting import (
+from battery_plan.modelling.cycle_value.bisection import BisectionSearch
+from battery_plan.modelling.cycle_value.cutting_plane import CuttingPlaneSearch
+from battery_plan.modelling.cycle_value.oracle import CycleOracle
+from battery_plan.modelling.parameters import ModelParameters
+from battery_plan.modelling.periods import SettlementPeriods
+from battery_plan.modelling.rolling_horizon import RollingPolicy, WindowProgress
+from battery_plan.reporting import (
     ConsoleReporter,
     JsonReporter,
     LogReporter,

@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #   kernelspec:
-#     display_name: battery-case
+#     display_name: battery-plan
 #     language: python
 #     name: python3
 # ---
@@ -17,6 +17,11 @@
 # What the dispatch of 2018–2020 actually did, read off the plan the model
 # wrote: `data/results/dispatch_plan.csv`, plus the committed measurement CSVs
 # under `docs/model/`.
+#
+# Every reading is a function in `battery_plan.analysis`, the module the solver
+# job builds a run's results page from, so this notebook and the site compute
+# each figure by one code path; what stays here is the plotting and the
+# comparison against the documents.
 #
 # Two things happen here. §1 re-derives every figure
 # [`docs/model/results.md`](../docs/model/results.md) quotes and diffs it
@@ -29,7 +34,7 @@
 # missing, solve one first:
 #
 # ```
-# uv run battery-case dispatch
+# uv run battery-plan dispatch
 # ```
 #
 # Percent-format script: each `# %%` starts a cell. In Zed, put the cursor in a
@@ -46,10 +51,34 @@ import seaborn as sns
 from IPython import get_ipython
 from matplotlib.ticker import FuncFormatter
 
-from battery_case import load_battery_spec
-from battery_case.data_io.paths import RESULTS_DIR
-from battery_case.modelling.parameters import ModelParameters, prorated_cycle_budget
-from battery_case.modelling.plan import summarise
+from battery_plan import load_battery_spec
+from battery_plan.analysis import (
+    breakeven_markup,
+    constraint_checks,
+    daily_summary,
+    days_worth_trading,
+    fit,
+    half_hour_profile,
+    headline_figures,
+    lifetime_cost,
+    market_pair,
+    monthly_prices,
+    monthly_profit,
+    net_power_grid,
+    profit_split,
+    prorated_crossing,
+    quarterly_level_and_spread,
+    spread_explanation,
+    spread_histogram,
+    spread_readings,
+    trading_periods,
+    wear_cost,
+    with_derived_columns,
+    yardstick_summary,
+    yearly_summary,
+)
+from battery_plan.data_io.paths import RESULTS_DIR
+from battery_plan.modelling.parameters import ModelParameters
 
 # Reload the package on edit, when running under an IPython kernel. Spelled out
 # rather than as %load_ext so this file stays importable, lintable Python.
@@ -91,7 +120,7 @@ GBP = FuncFormatter(lambda v, _: f"£{v:,.0f}")
 PLAN_PATH = RESULTS_DIR / "dispatch_plan.csv"
 
 if not PLAN_PATH.exists():
-    raise SystemExit(f"no plan at {PLAN_PATH}\nsolve one first:  uv run battery-case dispatch")
+    raise SystemExit(f"no plan at {PLAN_PATH}\nsolve one first:  uv run battery-plan dispatch")
 
 spec = load_battery_spec()
 params = ModelParameters.from_spec(spec)
@@ -129,65 +158,20 @@ print("provenance checks passed")
 print(f"worst backward step in the cycle count:  {worst_step:,.3g}  (rounding noise)")
 
 # %%
-# The derived columns the rest of the notebook works in. Signed net power is
-# the one that makes a dispatch figure readable: positive is delivering.
-delivered = 1.0 - params.discharge_loss
-
-plan["charge_mw"] = plan["charge_1_mw"] + plan["charge_2_mw"]
-plan["discharge_mw"] = plan["discharge_1_mw"] + plan["discharge_2_mw"]
-plan["net_mw"] = plan["discharge_mw"] - plan["charge_mw"]
-plan["spread"] = plan["price_2"] - plan["price_1"]
-
-# A trader with both markets open buys at the cheaper of the two and sells into
-# the dearer, in every period. These two columns are that view of the day, and
-# everything below that talks about "the day's prices" is built from them.
-plan["buy_at"] = plan[["price_1", "price_2"]].min(axis=1)
-plan["sell_at"] = plan[["price_1", "price_2"]].max(axis=1)
-
-day = plan.index.normalize()
+# The derived columns the rest of the notebook works in (with_derived_columns):
+# signed net power, positive delivering, and buy_at / sell_at — a trader with
+# both markets open buys at the cheaper of the two and sells into the dearer, in
+# every period. Everything below that talks about "the day's prices" is built
+# from those two.
+plan = with_derived_columns(plan)
 
 # How many periods a day the plan is actually on each side. These two counts
-# calibrate the harvestable spread below: the battery does not take the day's
-# one best trade, it takes about fourteen of them.
-PERIODS_SELLING = round(float((plan["discharge_mw"] > 1e-5).groupby(day).sum().mean()))
-PERIODS_BUYING = round(float((plan["charge_mw"] > 1e-5).groupby(day).sum().mean()))
-
-
-def harvestable_spread(frame: pd.DataFrame) -> float:
-    """Mean of the day's best selling periods less its cheapest buying ones.
-
-    The day's range — its highest price less its lowest — is the spread on one
-    perfect trade, and the battery makes about three cycles a day, so the range
-    overstates what is reachable. Averaging the top ``PERIODS_SELLING`` prices
-    against the bottom ``PERIODS_BUYING`` measures the same thing over the
-    volume the battery can actually move.
-
-    It stays exogenous: the two counts are calibrated once, on the plan's
-    average behaviour over three years, but each day's value is read off that
-    day's prices alone and knows nothing of what the plan did that day.
-    """
-    top = np.sort(frame["sell_at"].to_numpy())[::-1][:PERIODS_SELLING].mean()
-    bottom = np.sort(frame["buy_at"].to_numpy())[:PERIODS_BUYING].mean()
-    return float(top - bottom)
-
-
-daily = pd.DataFrame(
-    {
-        "profit_gbp": plan["net_revenue_gbp"].resample("D").sum(),
-        "cycles": plan["cycles"]
-        .resample("D")
-        .last()
-        .diff()
-        .fillna(plan["cycles"].resample("D").last().iloc[0]),
-        "mean_price": plan[["price_1", "price_2"]].mean(axis=1).resample("D").mean(),
-        # The day's range: the one best trade available. §2 uses it, where the
-        # question is whether *any* trade clears the round trip.
-        "day_range": plan["sell_at"].groupby(day).max() - plan["buy_at"].groupby(day).min(),
-        # What the battery's own throughput can reach. §4 and §6 use this.
-        "harvestable_spread": plan.groupby(day).apply(harvestable_spread, include_groups=False),
-        "delivered_mwh": params.dt * delivered * plan["discharge_mw"].resample("D").sum(),
-    }
-)
+# calibrate the harvestable spread: the battery does not take the day's one best
+# trade, it takes about fourteen of them. The daily frame carries the day's
+# range (the one best trade, which §2 uses) and that harvestable spread (what the
+# battery's own throughput can reach, which §4 and §6 use).
+PERIODS_SELLING, PERIODS_BUYING = trading_periods(plan)
+daily = daily_summary(plan, params)
 print(f"the plan buys in {PERIODS_BUYING} periods a day and sells in {PERIODS_SELLING}, on average")
 daily.head()
 
@@ -215,16 +199,11 @@ DOCUMENTED = {
     "profit_per_cycle_gbp": 60.23,
 }
 
-figures = summarise(plan, params)
-idle = int(figures["periods"] - figures["periods_charging"] - figures["periods_discharging"])
-
-derived = dict(figures)
-derived["periods_idle"] = idle
-derived["profit_per_cycle_gbp"] = figures["profit_gbp"] / figures["cycles_used"]
+figures = headline_figures(plan, params)
 
 reconciliation = pd.DataFrame(
     {
-        "plan": {k: derived[k] for k in DOCUMENTED},
+        "plan": {k: figures[k] for k in DOCUMENTED},
         "documented": DOCUMENTED,
     }
 )
@@ -252,22 +231,17 @@ else:
 # time, and the plan buys in Market 1 and sells into Market 2 to collect that.
 
 # %%
+markets = market_pair(plan, params)
 pair = pd.DataFrame(
     {
         "plan": {
-            "periods market 2 dearer (%)": 100 * float((plan["spread"] > 0).mean()),
-            "mean market 2 less market 1 (£/MWh)": float(plan["spread"].mean()),
-            "bought in market 1 (MWh)": params.dt * float(plan["charge_1_mw"].sum()),
-            "bought in market 2 (MWh)": params.dt * float(plan["charge_2_mw"].sum()),
-            "delivered into market 1 (MWh)": params.dt
-            * delivered
-            * float(plan["discharge_1_mw"].sum()),
-            "delivered into market 2 (MWh)": params.dt
-            * delivered
-            * float(plan["discharge_2_mw"].sum()),
-            "degradation, rho x cycles (% of volume)": 100
-            * params.degradation_per_cycle
-            * float(figures["cycles_used"]),
+            "periods market 2 dearer (%)": 100 * markets["share_market_2_dearer"],
+            "mean market 2 less market 1 (£/MWh)": markets["mean_spread_gbp_per_mwh"],
+            "bought in market 1 (MWh)": markets["bought_market_1_mwh"],
+            "bought in market 2 (MWh)": markets["bought_market_2_mwh"],
+            "delivered into market 1 (MWh)": markets["delivered_market_1_mwh"],
+            "delivered into market 2 (MWh)": markets["delivered_market_2_mwh"],
+            "degradation, rho x cycles (% of volume)": figures["degradation_pct"],
         },
         "documented": {
             "periods market 2 dearer (%)": 77.5,
@@ -290,23 +264,23 @@ pair.style.format("{:,.2f}", na_rep="—")
 # before a trade is worth making.
 
 # %%
-breakeven_markup = 1.0 / params.round_trip_efficiency - 1.0
+markup = breakeven_markup(params)
 print(f"a round trip keeps {params.round_trip_efficiency:.2%}")
-print(f"so a sale has to beat the purchase by {breakeven_markup:.1%} before it pays")
+print(f"so a sale has to beat the purchase by {markup:.1%} before it pays")
 
 # %%
-monthly = plan[["price_1", "price_2"]].resample("MS")
+monthly = monthly_prices(plan)
 
 fig, ax = plt.subplots(figsize=(11, 4))
 for column, colour, label in (
     ("price_1", CHARGE, "Market 1 (half-hourly)"),
     ("price_2", DISCHARGE, "Market 2 (hourly)"),
 ):
-    mean = monthly[column].mean()
+    mean = monthly[f"{column}_mean"]
     ax.fill_between(
         mean.index,
-        monthly[column].quantile(0.1),
-        monthly[column].quantile(0.9),
+        monthly[f"{column}_p10"],
+        monthly[f"{column}_p90"],
         color=colour,
         alpha=0.15,
         lw=0,
@@ -328,8 +302,9 @@ plt.show()
 # %%
 fig, axes = plt.subplots(1, 2, figsize=(11, 3.8))
 
-share_dearer = float((plan["spread"] > 0).mean())
-axes[0].hist(plan["spread"].clip(-20, 20), bins=80, color=DISCHARGE, alpha=0.85)
+share_dearer = markets["share_market_2_dearer"]
+edges, counts = spread_histogram(plan)
+axes[0].stairs(counts, edges, fill=True, color=DISCHARGE, alpha=0.85)
 axes[0].axvline(0.0, color=MUTED, lw=1.0, ls=(0, (4, 3)))
 axes[0].set_xlabel("price 2 − price 1  (£/MWh, clipped at ±20)")
 axes[0].set_ylabel("periods")
@@ -339,10 +314,9 @@ axes[0].set_title(
     color=INK,
 )
 
-half_hour = plan.index.hour + plan.index.minute / 60.0
-by_half_hour = plan.groupby(half_hour)
-axes[1].plot(by_half_hour["price_1"].mean(), color=CHARGE, lw=2.0, label="Market 1")
-axes[1].plot(by_half_hour["price_2"].mean(), color=DISCHARGE, lw=2.0, label="Market 2")
+profile = half_hour_profile(plan)
+axes[1].plot(profile["price_1"], color=CHARGE, lw=2.0, label="Market 1")
+axes[1].plot(profile["price_2"], color=DISCHARGE, lw=2.0, label="Market 2")
 axes[1].set_xlabel("hour of day")
 axes[1].set_ylabel("mean £/MWh")
 axes[1].set_title("The shape the battery trades against", loc="left", color=INK)
@@ -353,10 +327,10 @@ fig.tight_layout()
 plt.show()
 
 # %%
-buy_floor = plan["buy_at"].groupby(day).min()
-breakeven_level = buy_floor * (1.0 + breakeven_markup)
-sell_ceiling = plan["sell_at"].groupby(day).max()
-days_worth_trading = float((sell_ceiling > breakeven_level).mean())
+buy_floor = daily["buy_floor"]
+breakeven_level = buy_floor * (1.0 + markup)
+sell_ceiling = daily["sell_ceiling"]
+share_worth_trading = days_worth_trading(daily, params)
 
 fig, ax = plt.subplots(figsize=(11, 4))
 ax.fill_between(
@@ -369,7 +343,7 @@ ax.set_ylabel("£/MWh")
 ax.set_ylim(0, min(200, float(sell_ceiling.max())))
 ax.set_title(
     f"The day's range against what a trade has to clear — "
-    f"{days_worth_trading:.1%} of days clear it",
+    f"{share_worth_trading:.1%} of days clear it",
     loc="left",
     color=INK,
 )
@@ -452,11 +426,7 @@ plt.show()
 # orange delivering. The diurnal pattern and its seasonal drift read together.
 
 # %%
-year = plan.loc["2020"]
-grid = year["net_mw"].to_frame("net_mw")
-grid["day"] = grid.index.normalize()
-grid["period"] = grid.index.hour * 2 + (grid.index.minute // 30)
-heat = grid.pivot_table(index="period", columns="day", values="net_mw")
+heat = net_power_grid(plan.loc["2020"])
 
 fig, ax = plt.subplots(figsize=(12, 4.2))
 limit = float(np.abs(heat.to_numpy()).max())
@@ -480,9 +450,6 @@ plt.show()
 # %%
 fig, axes = plt.subplots(1, 2, figsize=(11, 3.8))
 
-profile = plan.groupby(half_hour)[
-    ["charge_1_mw", "charge_2_mw", "discharge_1_mw", "discharge_2_mw"]
-].mean()
 axes[0].plot(profile.index, -profile["charge_1_mw"], color=CHARGE, lw=2.0, label="charge, market 1")
 axes[0].plot(
     profile.index,
@@ -509,20 +476,11 @@ axes[0].set_ylabel("mean MW")
 axes[0].set_title("Each market is used for one side of the trade", loc="left", color=INK)
 axes[0].legend(frameon=False, fontsize=8)
 
-states = pd.DataFrame(
-    {
-        "charging": plan.groupby(half_hour)["charge_mw"].apply(lambda s: float((s > 1e-5).mean())),
-        "delivering": plan.groupby(half_hour)["discharge_mw"].apply(
-            lambda s: float((s > 1e-5).mean())
-        ),
-    }
-)
-states["idle"] = 1.0 - states["charging"] - states["delivering"]
 axes[1].stackplot(
-    states.index,
-    states["charging"],
-    states["delivering"],
-    states["idle"],
+    profile.index,
+    profile["share_charging"],
+    profile["share_delivering"],
+    profile["share_idle"],
     colors=[CHARGE, DISCHARGE, "#dcdcd8"],
     labels=["charging", "delivering", "idle"],
 )
@@ -546,28 +504,13 @@ plt.show()
 # comes from.
 
 # %%
-TOLERANCE = 1e-5
-both = int(((plan["charge_mw"] > TOLERANCE) & (plan["discharge_mw"] > TOLERANCE)).sum())
-
-hour = plan.index.floor("h")
-flatness = plan.groupby(hour)[["charge_2_mw", "discharge_2_mw"]].agg(lambda s: s.max() - s.min())
-not_flat = int((flatness > TOLERANCE).any(axis=1).sum())
-
-over_rate = int(
-    (
-        (plan["charge_mw"] > params.max_charge_mw + TOLERANCE)
-        | (plan["discharge_mw"] > params.max_discharge_mw + TOLERANCE)
-    ).sum()
-)
-over_volume = int((plan["storage_mwh"] > plan["effective_volume_mwh"] + TOLERANCE).sum())
-
-checks = pd.Series(
+checks = constraint_checks(plan, params).rename(
     {
-        "§4.3 periods both charging and delivering": both,
-        "§4.5 hours with a non-flat market 2 decision": not_flat,
-        "§4.3 periods over the rate limit": over_rate,
-        "§4.1 periods over the degraded volume": over_volume,
-        "§4.6 cycles spent beyond the budget": int(figures["cycles_used"] > params.cycle_budget),
+        "both_charging_and_delivering": "§4.3 periods both charging and delivering",
+        "market_2_not_flat_hours": "§4.5 hours with a non-flat market 2 decision",
+        "over_rate_limit": "§4.3 periods over the rate limit",
+        "over_degraded_volume": "§4.1 periods over the degraded volume",
+        "over_cycle_budget": "§4.6 cycles spent beyond the budget",
     }
 )
 print(checks.to_string())
@@ -588,20 +531,14 @@ print(f"\n{'all clear' if checks.sum() == 0 else 'VIOLATIONS — see above'}")
 # choose different volumes.
 
 # %%
-at_market_1 = params.dt * float(
-    (plan["price_1"] * (delivered * plan["discharge_mw"] - plan["charge_mw"])).sum()
-)
-from_market_2 = params.dt * float(
-    (plan["spread"] * (delivered * plan["discharge_2_mw"] - plan["charge_2_mw"])).sum()
-)
-
-split = pd.Series(
+split = profit_split(plan, params).rename(
     {
-        "time arbitrage, valued at market 1": at_market_1,
-        "the market 2 gap": from_market_2,
-        "profit": at_market_1 + from_market_2,
+        "time_arbitrage_gbp": "time arbitrage, valued at market 1",
+        "market_2_gap_gbp": "the market 2 gap",
+        "profit_gbp": "profit",
     }
 )
+from_market_2 = split["the market 2 gap"]
 assert abs(split["profit"] - figures["profit_gbp"]) < 0.01, "the split must be exact"
 print(split.map("£{:,.0f}".format).to_string())
 print(f"\nthe market 2 gap is {from_market_2 / figures['profit_gbp']:.1%} of the profit")
@@ -616,12 +553,12 @@ axes[0].yaxis.set_major_formatter(GBP)
 axes[0].set_title("Cumulative profit", loc="left", color=INK)
 axes[0].tick_params(axis="x", rotation=30)
 
-monthly_profit = plan["net_revenue_gbp"].resample("MS").sum()
+by_month = monthly_profit(plan)
 axes[1].bar(
-    monthly_profit.index,
-    monthly_profit,
+    by_month.index,
+    by_month,
     width=25,
-    color=np.where(monthly_profit >= 0, DISCHARGE, CHARGE),
+    color=np.where(by_month >= 0, DISCHARGE, CHARGE),
 )
 axes[1].axhline(0.0, color=MUTED, lw=0.8)
 axes[1].yaxis.set_major_formatter(GBP)
@@ -635,21 +572,7 @@ plt.show()
 # %%
 # Year by year, as results.md tables it, with the spread added as the column
 # that explains the progression.
-years = plan.groupby(plan.index.year)
-cumulative_cycles = years["cycles"].last()
-
-by_year = pd.DataFrame(
-    {
-        "profit_gbp": years["net_revenue_gbp"].sum(),
-        "mean_price_1": years["price_1"].mean(),
-        "mean_price_2": years["price_2"].mean(),
-        "cycles": cumulative_cycles.diff().fillna(cumulative_cycles.iloc[0]),
-        "mean_day_range": daily["day_range"].groupby(daily.index.year).mean(),
-        "mean_harvestable": daily["harvestable_spread"].groupby(daily.index.year).mean(),
-        "profit_per_cycle": years["net_revenue_gbp"].sum()
-        / cumulative_cycles.diff().fillna(cumulative_cycles.iloc[0]),
-    }
-)
+by_year = yearly_summary(plan, daily)
 by_year.style.format("{:,.2f}").format({"profit_gbp": "£{:,.0f}", "cycles": "{:,.0f}"})
 
 # %% [markdown]
@@ -661,8 +584,7 @@ by_year.style.format("{:,.2f}").format({"profit_gbp": "£{:,.0f}", "cycles": "{:
 # where λ would start to matter.
 
 # %%
-prorated = prorated_cycle_budget(spec, len(plan))
-crossing = plan.index[int(np.searchsorted(plan["cycles"].to_numpy(), prorated))]
+prorated, crossing = prorated_crossing(plan, spec)
 print(f"full budget      {params.cycle_budget:,.0f} cycles — {figures['cycles_used']:,.0f} spent")
 print(f"pro-rated (§5)   {prorated:,.0f} cycles — crossed on {crossing:%Y-%m-%d}")
 
@@ -702,12 +624,11 @@ plt.show()
 # What the wear cost, priced at the spreads the plan actually realised. Not a
 # charge in the objective — §5 keeps degradation physical, in the volume — so
 # this is the opportunity cost of the capacity given up, for context.
-volume_lost_mwh = params.nominal_volume_mwh - float(figures["final_usable_volume_mwh"])
-realised_margin = float(
-    figures["mean_sell_price_gbp_per_mwh"] - figures["mean_buy_price_gbp_per_mwh"]
-)
-cycles_per_day = float(daily["cycles"].mean())
-forgone_per_year = volume_lost_mwh * realised_margin * cycles_per_day * 365.25
+wear = wear_cost(params, figures, daily)
+volume_lost_mwh = wear["volume_lost_mwh"]
+realised_margin = wear["realised_margin_gbp_per_mwh"]
+cycles_per_day = wear["cycles_per_day"]
+forgone_per_year = wear["forgone_per_year_gbp"]
 
 print(f"volume lost over the horizon  {volume_lost_mwh:.3f} MWh of {params.nominal_volume_mwh:.2f}")
 print(f"realised margin per MWh       £{realised_margin:,.2f}")
@@ -738,46 +659,14 @@ print(
 # result with the result. It is still worth measuring, as a description of what
 # was captured — which is why it is in the table and not in the figure.
 
-
-# %%
-def _fit(x: pd.Series, y: pd.Series) -> tuple[float, float, float]:
-    """Least-squares slope, intercept and R² for ``y`` on ``x``."""
-    mask = x.notna() & y.notna()
-    slope, intercept = np.polyfit(x[mask], y[mask], 1)
-    predicted = slope * x[mask] + intercept
-    r2 = 1.0 - float(((y[mask] - predicted) ** 2).sum() / ((y[mask] - y[mask].mean()) ** 2).sum())
-    return float(slope), float(intercept), r2
-
-
 # %%
 # What each reading of "the day's spread" explains, measured the same way.
-sold_gbp = (delivered * plan["discharge_mw"] * plan["sell_at"]).groupby(day).sum()
-sold_mwh = (delivered * plan["discharge_mw"] * params.dt).groupby(day).sum()
-bought_gbp = (plan["charge_mw"] * plan["buy_at"]).groupby(day).sum()
-bought_mwh = (plan["charge_mw"] * params.dt).groupby(day).sum()
-
-candidates = pd.DataFrame(
-    {
-        "the day's range": daily["day_range"],
-        "harvestable spread": daily["harvestable_spread"],
-        "within-day volatility": plan["sell_at"].groupby(day).std(),
-        "mean |market 2 − market 1|": plan["spread"].abs().groupby(day).mean(),
-        "realised by the plan": sold_gbp / sold_mwh.replace(0.0, np.nan)
-        - bought_gbp / bought_mwh.replace(0.0, np.nan),
-        "the price level": daily["mean_price"],
-    }
+readings = spread_readings(plan, params, daily)
+explained = (
+    spread_explanation(readings, daily)
+    .set_index("reading")
+    .rename(columns={"gbp_per_unit": "£ per unit", "r2": "R²"})
 )
-
-explained = pd.DataFrame(
-    [
-        dict(
-            zip(("£ per unit", "R²"), _fit(candidates[name], daily["profit_gbp"])[::2], strict=True)
-        )
-        for name in candidates
-    ],
-    index=candidates.columns,
-)
-explained["exogenous"] = [True, True, True, True, False, True]
 explained.style.format({"£ per unit": "{:,.2f}", "R²": "{:.3f}"})
 
 # %%
@@ -787,7 +676,7 @@ for ax, column, colour, label in (
     (axes[0], "harvestable_spread", DISCHARGE, "the day's harvestable spread (£/MWh)"),
     (axes[1], "mean_price", CHARGE, "the day's mean price (£/MWh)"),
 ):
-    slope, intercept, r2 = _fit(daily[column], daily["profit_gbp"])
+    slope, intercept, r2 = fit(daily[column], daily["profit_gbp"])
     ax.scatter(daily[column], daily["profit_gbp"], s=6, color=colour, alpha=0.35, lw=0)
     line = np.linspace(daily[column].min(), daily[column].max(), 50)
     ax.plot(line, slope * line + intercept, color=INK, lw=1.4)
@@ -806,11 +695,8 @@ plt.show()
 # %%
 # The two moving apart is the mechanism the document asserts: the level fell
 # while the spread widened.
-quarterly = pd.DataFrame(
-    {
-        "mean price": daily["mean_price"].resample("QS").mean(),
-        "mean harvestable spread": daily["harvestable_spread"].resample("QS").mean(),
-    }
+quarterly = quarterly_level_and_spread(daily).rename(
+    columns={"mean_price": "mean price", "harvestable_spread": "mean harvestable spread"}
 )
 normalised = quarterly / quarterly.iloc[0]
 
@@ -841,23 +727,19 @@ plt.show()
 # *where* the model beats it.
 
 # %%
-YARDSTICK_VOLUME_MWH = 4.0  # nominal: the yardstick spends no wear
-
-bought_mwh = YARDSTICK_VOLUME_MWH / (1.0 - params.charge_loss)
-delivered_mwh = YARDSTICK_VOLUME_MWH * (1.0 - params.discharge_loss)
-daily["yardstick_gbp"] = delivered_mwh * sell_ceiling - bought_mwh * buy_floor
-
-yardstick_total = float(daily["yardstick_gbp"].sum())
+# daily_summary prices one ideal cycle of the nominal volume a day: the
+# yardstick spends no wear.
+yardstick = yardstick_summary(daily, figures)
+yardstick_total = yardstick["total_gbp"]
 print(f"one ideal cycle a day   £{yardstick_total:,.0f}   (results.md: £178,254)")
-print(f"the model, against it   {figures['profit_gbp'] / yardstick_total:.2f}x")
+print(f"the model, against it   {yardstick['ratio']:.2f}x")
 print(f"cycles a day, mean      {figures['cycles_used'] / (len(plan) / 48):.1f}")
-days_lost = int((daily["profit_gbp"] < daily["yardstick_gbp"]).sum())
+days_lost = int(yardstick["days_below"])
 print(f"days the model loses    {days_lost} of {len(daily):,}")
 
 # %%
 fig, axes = plt.subplots(1, 2, figsize=(11, 3.8))
 
-ratio = (daily["profit_gbp"] / daily["yardstick_gbp"]).replace([np.inf, -np.inf], np.nan)
 axes[0].scatter(daily["yardstick_gbp"], daily["profit_gbp"], s=6, color=DISCHARGE, alpha=0.35, lw=0)
 # The axes stop at the 99th percentile: a handful of storm days would otherwise
 # push the thousand days that matter into one corner. They are still plotted.
@@ -874,7 +756,7 @@ axes[0].set_xticks(np.arange(0, limit, 200))
 axes[0].set_yticks(np.arange(0, limit, 200))
 axes[0].set_title("Mostly above parity, on narrower spreads too", loc="left", color=INK)
 
-by_year_ratio = ratio.groupby(ratio.index.year).median()
+by_year_ratio = by_year["yardstick_median_ratio"]
 axes[1].bar(by_year_ratio.index.astype(str), by_year_ratio, width=0.55, color=CHARGE)
 axes[1].axhline(1.0, color=MUTED, lw=0.9, ls=(0, (4, 3)))
 axes[1].set_ylabel("model / yardstick, median day")
@@ -886,11 +768,10 @@ plt.show()
 
 # %%
 # The costs §5 leaves out of the objective, for context only.
-years_of_data = len(plan) / (48 * 365.25)
-lifetime_cost = spec.capex_gbp + spec.fixed_opex_gbp_per_year * years_of_data
+costs = lifetime_cost(spec, len(plan))
 print(f"trading profit                     £{figures['profit_gbp']:,.0f}")
-print(f"capex + opex over {years_of_data:.1f} years        £{lifetime_cost:,.0f}")
-print(f"short of paying for itself by      £{lifetime_cost - figures['profit_gbp']:,.0f}")
+print(f"capex + opex over {costs['years']:.1f} years        £{costs['total_gbp']:,.0f}")
+print(f"short of paying for itself by      £{costs['total_gbp'] - figures['profit_gbp']:,.0f}")
 
 # %% [markdown]
 # ## §8 Solver evidence

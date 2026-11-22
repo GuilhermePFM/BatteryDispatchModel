@@ -8,6 +8,22 @@
 
 ---
 
+> **Scope.** This document is the Python package, `src/battery_plan/`. The web
+> platform built around it — the Go API and DLQ handler, the solver Lambda, the
+> React site, the AWS stack — is drawn in the [README](../README.md#architecture),
+> with the reasons for each choice under
+> [Why it's built this way](../README.md#why-its-built-this-way). Its rules live
+> next to the code: [`contracts/platform.md`](../contracts/platform.md) (storage,
+> routes, quotas, refunds, the local stack),
+> [`contracts/README.md`](../contracts/README.md) (the schemas),
+> [`services/api`](../services/api/README.md),
+> [`services/solver`](../services/solver/README.md), [`web`](../web/README.md) and
+> [`deploy.md`](deploy.md). The package meets the platform at one function,
+> `run_dispatch` in `dispatch.py`, which the CLI and the solver Lambda both call
+> (the Lambda with a deadline, so the cycle-value search stops early rather than
+> time out), and at `analysis.py` and `contracts.py` below; `contracts.py` fixes
+> web runs at one committed day with one day of lookahead.
+
 ## 1. One organizing idea: code <-> methodology parity
 
 The formulation lives in [`model/model.md`](model/model.md) as numbered sections. Every module under `modelling/` owns a contiguous range of those sections and says so in its first line, so a reviewer reading §4.5 can open exactly one file and find exactly one implementation of it. The filing principle is the paragraphs the code is answerable to, rather than the usual "models, services, utils".
@@ -26,8 +42,11 @@ The formulation lives in [`model/model.md`](model/model.md) as numbered sections
 | `modelling/cycle_value/searches.py` | §6 | The methods on offer, by the name that selects one |
 | `modelling/cycle_value/calibrated_policy.py` | §6 | A calibrated run, as a `DispatchPolicy` |
 | `modelling/plan.py` | §7 | The plan and the figures read off it |
+| `dispatch.py` | §6 | One run from in-memory spec and prices: `run_dispatch(spec, prices, config, on_progress)` |
+| `analysis.py` | §7 | The readings of a plan, and `build_result_payload`, the JSON a results page draws |
+| `contracts.py` | | A web request as a spec and a `DispatchConfig`, and the params hash ([contracts/](../contracts/README.md)) |
 
-One dependency rule holds the package together: **the model cannot read a file, and the loaders cannot model.** `data_models/` imports nothing of ours. `data_io/` and `modelling/` both depend on it and never on each other. `cli.py` is the only module that touches both. Inside `modelling/` the same rule runs once more: `cycle_value/` is the outer search for the budget's value and depends on the formulation beside it, while nothing in the formulation imports from `cycle_value/`. Six modules used to share §6 in one flat listing; the five that search for the value are now a package of their own, leaving `rolling_horizon.py` as the §6 the formulation owns.
+One dependency rule holds the package together: **the model cannot read a file, and the loaders cannot model.** `data_models/` imports nothing of ours. `data_io/` and `modelling/` both depend on it and never on each other. `dispatch.py` is the only module that drives the model from loaded data, and `cli.py`, which loads the files and hands them to it, the only one that touches both halves; a web solver loads its own prices and calls the same `run_dispatch`. Inside `modelling/` the same rule runs once more: `cycle_value/` is the outer search for the budget's value and depends on the formulation beside it, while nothing in the formulation imports from `cycle_value/`. Six modules used to share §6 in one flat listing; the five that search for the value are now a package of their own, leaving `rolling_horizon.py` as the §6 the formulation owns.
 
 ```mermaid
 flowchart TD
@@ -48,7 +67,7 @@ flowchart TD
 Splitting on **noun / acquisition / decision** rather than on file type means the MILP tests need no spreadsheet and the loader tests need no solver, so most of the suite needs neither to run.
 
 ```
-src/battery_case/
+src/battery_plan/
   data_models/      typed containers for the inputs, with no behaviour of their own
     battery.py        BatterySpec
     market_prices.py  MarketPrices
@@ -71,7 +90,11 @@ src/battery_case/
       cutting_plane.py      the cycle value by cutting planes
       searches.py           the registry of methods
       calibrated_policy.py  a calibrated run as a DispatchPolicy
-  cli.py            the `battery-case` command
+  dispatch.py       run_dispatch and DispatchConfig, the in-memory run
+  analysis.py       the readings of a plan and the result payload
+  contracts.py      web requests, and the params hash
+  reporting.py      what a run says while it runs, CallbackReporter
+  cli.py            the `battery-plan` command
 ```
 
 ---
@@ -250,8 +273,8 @@ Lagrangian dual, which costs about half the passes and returns a bound on the
 answer. Both are in the package and both are selectable:
 
 ```bash
-uv run battery-case dispatch                         # cutting planes, the default
-uv run battery-case dispatch --search bisection      # the reference method
+uv run battery-plan dispatch                         # cutting planes, the default
+uv run battery-plan dispatch --search bisection      # the reference method
 uv run python scripts/compare_searches.py 30
 ```
 

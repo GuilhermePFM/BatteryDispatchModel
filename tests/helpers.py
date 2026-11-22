@@ -5,9 +5,9 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from battery_case.data_models import BatterySpec, MarketPrices
-from battery_case.modelling.parameters import ModelParameters
-from battery_case.modelling.periods import PERIODS_PER_HOUR, SettlementPeriods, build_periods
+from battery_plan.data_models import BatterySpec, MarketPrices
+from battery_plan.modelling.parameters import ModelParameters
+from battery_plan.modelling.periods import PERIODS_PER_HOUR, SettlementPeriods, build_periods
 
 #: Attachment 1 as given, so the tests read against the numbers in the write-up.
 SPEC = BatterySpec(

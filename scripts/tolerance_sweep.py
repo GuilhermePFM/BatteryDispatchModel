@@ -21,13 +21,13 @@ import sys
 import time
 from pathlib import Path
 
-from battery_case.data_io.loaders import load_battery_spec, load_market_prices
-from battery_case.data_io.paths import PROJECT_ROOT
-from battery_case.modelling.cycle_value.cutting_plane import CuttingPlaneSearch
-from battery_case.modelling.cycle_value.oracle import CycleOracle
-from battery_case.modelling.parameters import ModelParameters
-from battery_case.modelling.periods import build_periods
-from battery_case.modelling.rolling_horizon import PERIODS_PER_DAY, RollingPolicy
+from battery_plan.data_io.loaders import load_battery_spec, load_market_prices
+from battery_plan.data_io.paths import PROJECT_ROOT
+from battery_plan.modelling.cycle_value.cutting_plane import CuttingPlaneSearch
+from battery_plan.modelling.cycle_value.oracle import CycleOracle
+from battery_plan.modelling.parameters import ModelParameters
+from battery_plan.modelling.periods import build_periods
+from battery_plan.modelling.rolling_horizon import PERIODS_PER_DAY, RollingPolicy
 
 #: The instance the write-up tabulates, in days.
 DEFAULT_DAYS = 30

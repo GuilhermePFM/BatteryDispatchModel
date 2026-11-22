@@ -7,12 +7,12 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from battery_case.modelling.cycle_value.searches import calibrate_cycle_value
-from battery_case.modelling.parameters import ModelParameters, prorated_cycle_budget
-from battery_case.modelling.periods import SettlementPeriods
-from battery_case.modelling.plan import COLUMNS, summarise
-from battery_case.modelling.rolling_horizon import RollingPolicy
-from battery_case.modelling.window_problem import solve_window
+from battery_plan.modelling.cycle_value.searches import calibrate_cycle_value
+from battery_plan.modelling.parameters import ModelParameters, prorated_cycle_budget
+from battery_plan.modelling.periods import SettlementPeriods
+from battery_plan.modelling.plan import COLUMNS, summarise
+from battery_plan.modelling.rolling_horizon import RollingPolicy
+from battery_plan.modelling.window_problem import solve_window
 from tests.helpers import SPEC, TOLERANCE, assert_feasible, hourly_mean, make_periods
 
 #: Two days of a repeating cheap-night / dear-evening shape.
