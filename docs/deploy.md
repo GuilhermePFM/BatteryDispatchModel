@@ -143,7 +143,16 @@ The summary of the run shows the URL (`https://dxxxx.cloudfront.net`). Check:
 `/api/health`, sign-in with both providers, a short run, an upload.
 
 Budget alerts need no confirmation: they arrive at 80 % of actual and 100 % of
-forecast monthly spend.
+forecast monthly spend. The budget counts only resources tagged
+`Project=batteryplan`, and **reads zero until that tag is activated**. The tag
+can take up to 24 hours to appear in billing; then, from the management account:
+
+```sh
+aws ce update-cost-allocation-tags-status \
+  --cost-allocation-tags-status TagKey=Project,Status=Active
+```
+
+Activation is not retroactive: costs before it are not counted.
 
 To run Terraform from your machine (e.g. `terraform plan`):
 
