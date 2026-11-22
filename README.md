@@ -19,7 +19,7 @@ plane's passes as they arrive, the result. Sped up 1.25×.*
 ```mermaid
 flowchart LR
     U(["browser"])
-    COG["<b>Cognito</b><br/>Google · LinkedIn"]
+    COG["<b>Cognito</b><br/>Google"]
     CF["<b>CloudFront</b>"]
     SITE[("<b>S3</b> site<br/>SPA + 3-year scenario")]
     API["<b>API</b> · Go Lambda<br/>Function URL, OAC"]
@@ -229,7 +229,7 @@ documents) and the Docker image are in [`docs/cli.md`](docs/cli.md).
 ## Deploy
 
 [`docs/deploy.md`](docs/deploy.md): bootstrap once (state bucket, GitHub OIDC
-provider, deploy role, ECR), the Google and LinkedIn apps, the repository's
+provider, deploy role, ECR), the Google app, the repository's
 secrets and variables, then every push to `main` builds the solver image and the
 Go zips, applies Terraform and publishes the SPA. It also covers the custom
 domain on Cloudflare DNS, the OAC gotchas and the cost.

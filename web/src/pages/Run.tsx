@@ -405,7 +405,7 @@ export function Run() {
                   <button type="submit" className="btn btn-primary">
                     <SignIn size={16} weight="bold" aria-hidden="true" /> Sign in to run
                   </button>
-                  <p className="quota">Google or LinkedIn. Three runs a day per account; the form keeps what you typed.</p>
+                  <p className="quota">With Google. Three runs a day per account; the form keeps what you typed.</p>
                 </>
               )}
             </div>

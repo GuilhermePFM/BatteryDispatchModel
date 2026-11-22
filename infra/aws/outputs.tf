@@ -30,7 +30,7 @@ output "cloudfront_domain" {
 }
 
 output "idp_redirect_uris" {
-  description = "Authorized redirect URIs to register in the Google and LinkedIn apps."
+  description = "Authorized redirect URIs to register in the Google app."
   value = concat(
     ["${local.cognito_prefix_domain_url}/oauth2/idpresponse"],
     var.auth_domain != "" ? ["https://${var.auth_domain}/oauth2/idpresponse"] : [],

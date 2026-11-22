@@ -80,22 +80,6 @@ variable "google_client_secret" {
   sensitive = true
 }
 
-variable "linkedin_client_id" {
-  description = "Client id of the LinkedIn app with the \"Sign In with LinkedIn using OpenID Connect\" product."
-  type        = string
-}
-
-variable "linkedin_client_secret" {
-  type      = string
-  sensitive = true
-}
-
-variable "linkedin_oidc_issuer" {
-  description = "Issuer Cognito checks LinkedIn's ID tokens against. LinkedIn's discovery document says https://www.linkedin.com/oauth; older tokens said https://www.linkedin.com (docs/deploy.md)."
-  type        = string
-  default     = "https://www.linkedin.com/oauth"
-}
-
 # --- Budget ------------------------------------------------------------------
 
 variable "budget_email" {

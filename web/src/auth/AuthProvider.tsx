@@ -1,4 +1,4 @@
-// Sign-in. In AWS: Cognito's managed login (Google or LinkedIn) through
+// Sign-in. In AWS: Cognito's managed login (Google) through
 // oidc-client-ts, authorization code + PKCE, the user kept in memory only, and
 // the ID token sent as the bearer (X-Authorization, see lib/api.ts) because it
 // carries the email, when the provider shares one. Locally: a fake sign-in
@@ -13,7 +13,7 @@ const DEV_KEY = "batteryplan:dev-user";
 
 export interface Account {
   sub: string;
-  /** Null when the identity provider withheld it (LinkedIn may). */
+  /** Null when the identity provider withheld it. */
   email: string | null;
   name?: string;
 }

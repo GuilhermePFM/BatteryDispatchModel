@@ -41,8 +41,8 @@ func (s *Server) quotaBody(used int, now time.Time) quotaBody {
 // GET /api/me: who is signed in and what is left of the day; records the user.
 func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 	user, now := userOf(r), s.now()
-	// An ID token may lack email (LinkedIn can withhold it): the user item
-	// then has none, and /api/me answers "email": null.
+	// An ID token may lack email: the user item then has none, and /api/me
+	// answers "email": null.
 	update := "SET last_seen = :now, first_seen = if_not_exists(first_seen, :now) REMOVE email"
 	values := map[string]types.AttributeValue{":now": store.S(store.Timestamp(now))}
 	var email any
