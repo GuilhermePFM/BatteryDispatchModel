@@ -41,8 +41,11 @@ Keep `infra/bootstrap/terraform.tfstate` (git-ignored) somewhere safe; the
 resources rarely change, and if it is lost they can be imported back.
 
 `github_repo` is compared case-sensitively: write it exactly as GitHub shows it.
+Repositories with immutable OIDC subjects send IDs too, so there it is
+`<owner>@<id>/<name>@<id>`. The prefix to use is `sub_claim_prefix` in
+`gh api repos/<owner>/<name>/actions/oidc/customization/sub`.
 
-The deploy role trusts only `repo:<owner>/<name>:ref:refs/heads/main`, so pushes
+The deploy role trusts only `repo:<github_repo>:ref:refs/heads/main`, so pushes
 to `main` and manual runs from `main`. Pull requests get no AWS access (CI
 validates Terraform offline). Its permissions are limited to the stack's own
 resources. It can create IAM roles only under `/batteryplan/` and only with the
