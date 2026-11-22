@@ -118,17 +118,15 @@ def build_problem(
     return problem, ctx.var
 
 
-#: HiGHS settings tuned for a window of this shape, measured in
-#: :doc:`solver-parameter-tunning <../../docs/model/solver-parameter-tunning>`.
+#: HiGHS settings tuned for a window of this shape.
 #:
 #: A window is solved at the root: cuts close 99.5% of the integrality gap
 #: before any branching, so the node count is 1 and the default heuristic suite
 #: spends most of each solve hunting an incumbent the bound has already reached.
-#: Switching off the restart, the RINS sub-MIP and the feasibility jump cuts a
-#: full pass over the horizon from 435 s to 176 s. These are settings, not
+#: Switching off the restart, the RINS sub-MIP and the feasibility jump speeds
+#: up a full pass over the horizon. These are settings, not
 #: relaxations: the binaries of §4.3 and every constraint block stay exactly as
-#: they were, and the reference slices of ``tests/test_historical_slices.py``
-#: still reproduce their known optima to 6e-11 relative.
+#: they were.
 #:
 #: Two heuristics are deliberately left on, each for its own reason.
 #:
@@ -153,20 +151,10 @@ TUNED_OPTIONS: dict[str, Any] = {
 #: Window length, in periods, at which :data:`TUNED_OPTIONS` stops being used.
 #:
 #: The settings of :data:`TUNED_OPTIONS` are measured on a 96-period window,
-#: where the node count is 1 and the heuristics are pure overhead
-#: (:doc:`solver-parameter-tunning <../../docs/model/solver-parameter-tunning>`
-#: §2). That premise fails as the window grows: a longer program does branch,
+#: where the node count is 1 and the heuristics are pure overhead.
+#: That premise fails as the window grows: a longer program does branch,
 #: and then the heuristics it has been denied are what find its incumbent.
-#: Measured on one-shot MILPs over real prices, the crossover is sharp and sits
-#: right here — tuned against stock, same machine, same data:
-#:
-#: ===========  ==========  ==========
-#: Window       Tuned       Stock
-#: ===========  ==========  ==========
-#: 7 days       0.9 s       2.5 s
-#: 14 days      18.3 s      9.6 s
-#: 30 days      *300 s, no proof*  23.4 s
-#: ===========  ==========  ==========
+#: Past the limit below, the stock settings are faster.
 #:
 #: So a fortnight and up is solved stock. Every window the rolling policy of §6
 #: actually poses is 96 periods, far below this, and keeps the tuning.
@@ -182,9 +170,8 @@ def default_solver(
     length of the program being solved: below :data:`TUNING_PERIOD_LIMIT` it is
     given :data:`TUNED_OPTIONS`, at or above it the stock settings, which are
     faster there by a wide margin. ``None`` means a rolling window and takes the
-    tuning. ``msg=True`` lets the HiGHS log through, which is what
-    :doc:`tractability <../../docs/model/tractability>` reads its bound
-    progression out of.
+    tuning. ``msg=True`` lets the HiGHS log through, which shows
+    its bound progression.
     """
     tuned = periods is None or periods < TUNING_PERIOD_LIMIT
     return pulp.HiGHS(msg=msg, timeLimit=time_limit, **(TUNED_OPTIONS if tuned else {}))

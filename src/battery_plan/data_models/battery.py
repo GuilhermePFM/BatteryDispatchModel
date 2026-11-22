@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True, slots=True)
 class BatterySpec:
-    """Technical and cost parameters of the battery (Attachment 1).
+    """Technical and cost parameters of the battery (the battery spec).
 
     Fields mirror the spreadsheet one for one, in the units it uses, so the
     loader stays trivial to audit. Note in particular:

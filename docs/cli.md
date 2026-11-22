@@ -35,8 +35,7 @@ uv run battery-plan dispatch --start 2018-01-01 --end 2018-01-31
 | `--quiet` | off | Results only; shorthand for `--progress none` |
 
 Web runs fix the window at `--commit-days 1 --lookahead-days 1`: the site's form
-doesn't offer the two, since [`solve.md`](solve.md) shows more foresight adds
-nothing on this data. The CLI keeps both flags for that comparison.
+doesn't offer the two, since the window is fixed there. The CLI keeps both flags for comparison.
 
 A run reports itself in phases — inputs, horizon, calibrate, recover — and keeps
 one table row per pass of the cycle-value search, so a converging run looks
@@ -53,42 +52,14 @@ uv run python scripts/compare_searches.py 30    # one instance, against an exact
 uv run python scripts/sweep_searches.py         # 1 to 90 days, both methods side by side
 ```
 
-## Reproducing the documents
-
-Every figure the documents quote comes from one of these runs, and one command
-runs all of them:
-
-```bash
-make results-list         # the stages, what each one feeds, what each one costs
-make results              # re-run every measurement in the docs (~2 h)
-make results-quick        # the same path over short horizons (~10 min), CSVs kept aside
-```
-
-`make results` walks the stages in reading order — the headline dispatch, the
-figures read off its plan, both search methods over every horizon, the
-tolerance table, and the one-shot MILPs behind `tractability.md` — rewriting
-`docs/model/*.csv` and teeing every stage to `data/results/reproduce/`. One
-stage at a time works too:
-
-```bash
-uv run python scripts/reproduce_docs.py dispatch results   # just the headline figures
-uv run python scripts/reproduce_docs.py --dry-run          # print the commands, run nothing
-```
-
-Figures come from `data/results/dispatch_plan.csv`. Profit reproduces to the
-penny across independent full-horizon runs; the period counts can move by one or
-two of 52,608, where a tie between an idle period and a near-zero trade is
-broken differently.
-
 ## In Docker
 
 For better compatibility, a Docker script is available to run the model on a machine with no Python, no uv and no
-solver: the image pins Python 3.12, resolves every dependency from `uv.lock`,
-and carries the two input spreadsheets, so the only requirement on the host is
-Docker itself.
+solver: the image pins Python 3.12, resolves every dependency from `uv.lock`, and
+carries no input data.
 
 ```bash
-scripts/docker-run.sh                       # full dispatch, all three years
+scripts/docker-run.sh                       # full dispatch
 scripts/docker-run.sh inputs                # spec + data quality
 scripts/docker-run.sh dispatch --start 2018-01-01 --end 2018-01-31
 make docker ARGS="dispatch --quiet"         # the same, through the Makefile

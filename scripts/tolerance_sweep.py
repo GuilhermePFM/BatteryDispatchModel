@@ -4,9 +4,7 @@
 
 Bisection always spends ``1 + 12`` passes. The cutting-plane method stops on a
 measured dual gap instead, so its cost is a choice: this is the table of that
-choice in
-[`cycle-value-experiments.md`](../docs/model/cycle-value-experiments.md), one
-row per tolerance, on one instance.
+choice, one row per tolerance, on one instance.
 
 As in the sweep, the budget is **half** what the horizon spends unpriced, so the
 cap binds hard and there is something to ration. Every row solves the instance
@@ -36,7 +34,7 @@ DEFAULT_DAYS = 30
 DEFAULT_TOLERANCES = (1e-2, 1e-3, 1e-4, 1e-5)
 
 #: Where the rows land, beside the other measurement tables of the write-up.
-OUT = PROJECT_ROOT / "docs" / "model" / "cycle-value-tolerance.csv"
+OUT = PROJECT_ROOT / "data" / "results" / "cycle-value-tolerance.csv"
 
 FIELDS = (
     "days",

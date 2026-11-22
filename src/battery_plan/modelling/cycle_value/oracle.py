@@ -8,7 +8,7 @@ search over a scalar, and there is more than one way to run it, so the search is
 a strategy (:class:`DualSearch`) rather than a function.
 
 What every method shares is the expensive part. One evaluation is one pass of
-the rolling policy over the whole horizon — about 77 seconds on this data —
+the rolling policy over the whole horizon,
 and a method is judged by how many passes it spends. :class:`CycleOracle` owns
 that primitive, memoises it, and counts the passes it serves, so the count is
 measured in one place rather than asserted by each method.

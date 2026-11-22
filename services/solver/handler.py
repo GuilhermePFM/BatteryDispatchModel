@@ -61,7 +61,7 @@ log.setLevel(logging.INFO)
 CONTRACTS_DIR = Path(
     os.environ.get("CONTRACTS_DIR", Path(__file__).resolve().parents[2] / "contracts")
 )
-#: The bundled 2018-2020 prices; the image copies them next to the handler.
+#: The bundled prices, for a deployment whose image carries them.
 PRICES_XLSX = Path(os.environ.get("PRICES_XLSX", MARKET_PRICES_XLSX))
 
 #: Seconds between progress writes: the callback fires once per solved window.

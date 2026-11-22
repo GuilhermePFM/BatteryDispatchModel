@@ -2,9 +2,8 @@
 
 *The cycle budget constaraint couples distant windows.*
 
-[← README](../README.md) · [data](data.md) · [architecture](architecture.md) ·
+[← README](../README.md) · [architecture](architecture.md) ·
 [solve](solve.md) · [bisection](bisection.md) ·
-[cycle-value experiments](model/cycle-value-experiments.md) ·
 [validation](validation.md) ·
 [glossary](glossary.md)
 
@@ -172,13 +171,10 @@ Three things that follow, and they are the reason this is the default:
   quality of the answer rather than only about the price. `max_passes` is a stop
   of last resort; reaching it means the gap did not close, which the returned
   `DualBound` says.
-- **It is cheaper.** Seven to nine passes across the 1-to-90-day sweep, a mean of
-  8.4, against a fixed 13 for the bisection, and ten passes over the full three
-  years. On the three-day instance it closes to a **zero** gap in 3 passes, which
+- **It is cheaper.** It needs fewer passes than the bisection's fixed 13. On the
+  three-day instance it closes to a **zero** gap in 3 passes, which
   proves its £1,435.79 optimal for the relaxation.
-- **Its λ is the shadow price, as stated.** £28.85 a cycle on 30 days of real
-  prices, against an exactly solved £4,937.98 that it lands within 0.05% of.
-  A bisection returns the top of a plateau instead, which yields the same
+- **Its λ is the shadow price, as stated.** A bisection returns the top of a plateau instead, which yields the same
   plan but is not a price to quote.
 
 One step is needed to turn the search into a deliverable. A relaxed pass may
@@ -200,35 +196,6 @@ feasible.
 > **The bound rests on each pass being a true maximum.** Weak duality needs
 > `L(λ)` maximised over the relaxed feasible set, and a rolling pass with one day
 > of lookahead is a heuristic that can under-solve and report a value *below* the
-> true `L`, which would leave the bound no bound at all. It is checked against an
-> exact solve on eight horizons, 1 to 90 days; the three-year bound rests on the
-> assumption rather than on evidence.
->
-> **The gap is on the dual, not on the plan.** The dual gap holds at
-> 0.003–0.007% on the long horizons while the distance from the bound to the
-> *feasible* plan is 0.44% at a year and 1.72% over three years — £3,213. The
-> recovery pass, not the search, is what that measures.
->
-> Both are measured in
-> [cycle-value experiments](model/cycle-value-experiments.md), where the two methods
-> are also compared row by row against exactly solved instances.
+> true `L`, which would leave the bound no bound at all. On long horizons the
+> bound rests on that assumption.
 
-## What this means for the actual answer
-
-On the real three years with the full budget, **the cap is never reached:
-3,443 of 5,000 cycles**. The round-trip loss of §4.2 needs 11% of spread before
-a cycle breaks even, which rules out the narrow spreads long before cycle life
-runs out. So `λ = 0`, no rationing happens, and the decomposition's only cost is
-the foresight past its lookahead, which
-[June 2018 puts at under 1%](solve.md#is-one-day-of-foresight-enough).
-
-Under the pro-rated 1,500-cycle budget from §5
-(`ModelParameters.prorated_cycle_budget()`) it binds, 3,443 unrationed use
-against 1,500 available, and `λ` becomes active. What it is worth over the whole
-three years is **not measured against a truth**: the run itself is cheap enough
-— ten passes, 7 min 20 s with cutting planes — but nothing at that size can be
-solved exactly to check it. It *is* checked on shorter instances with the budget
-halved, against the exact answer. On 30 days of real prices the shadow
-price is £28.85 a cycle and both methods land within 0.05% of an exactly solved
-£4,937.98
-([cycle-value experiments §2](model/cycle-value-experiments.md#2-what-each-method-costs-against-a-known-answer)).

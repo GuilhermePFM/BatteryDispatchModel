@@ -12,7 +12,7 @@ DynamoDB item. The rules it follows are in
 | `local_worker.py` | the same handler polling LocalStack's queue, for `docker compose` |
 | `Dockerfile` | the Lambda image (default target) and the local poller (`--target local`) |
 | `scripts/enqueue_example.py` | queues a run on the local stack as the API would, and waits for it |
-| `scripts/precompute_scenario.py` | writes `web/public/scenarios/full-2018-2020.json` |
+| `scripts/precompute_scenario.py` | writes `web/public/scenarios/default.json` |
 
 Tests are in [`tests/test_solver_handler.py`](../../tests/test_solver_handler.py),
 against moto (`uv run pytest tests/test_solver_handler.py`).
@@ -78,8 +78,8 @@ docker buildx build --platform linux/arm64 -f services/solver/Dockerfile \
 Built from the repo root, on `public.ecr.aws/lambda/python:3.12`, for arm64
 (Graviton). The dependencies come from `uv.lock`: the package's own and the
 `solver` group (`jsonschema`); boto3 is the base image's. The `aws` group
-installs boto3 for running locally and for the tests. The package, the 2018-2020
-spreadsheet and the schemas are copied into `/var/task` next to the handler.
+installs boto3 for running locally and for the tests. The package and the
+schemas are copied into `/var/task` next to the handler.
 
 To try the Lambda entry point itself, the base image's runtime emulator serves
 it on port 8080:
@@ -95,7 +95,7 @@ curl -d @event.json http://localhost:9000/2015-03-31/functions/function/invocati
 uv run python services/solver/scripts/precompute_scenario.py
 ```
 
-Runs Attachment 1 over all of 2018-2020 (cutting planes, commit 1, lookahead 1;
-about 3 minutes) and writes it as a succeeded run-record, validated against
+Runs the default battery over the bundled prices (cutting planes, commit 1,
+lookahead 1) and writes it as a succeeded run-record, validated against
 the schema. Its `plan_csv_key` is the placeholder `precomputed/no-plan-csv`:
 the schema requires one, and this run's plan is in no bucket.

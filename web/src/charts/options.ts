@@ -1,4 +1,4 @@
-// One ECharts option per figure of notebooks/02_results_analysis.py, built
+// One ECharts option per figure of a run's dashboard, built
 // from the result payload alone. Pure functions of (result, palette), so they
 // are tested with nulls and with a payload of a few days.
 import type { Result } from "../contracts/types";

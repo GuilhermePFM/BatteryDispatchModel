@@ -1,6 +1,6 @@
 """Covering the horizon with a sequence of MILP windows (§6).
 
-Solving all 52,608 periods in one mixed-integer program is not practical: the
+Solving every period in one mixed-integer program is not practical: the
 binary of §4.3 appears in every period, and solve time grows sharply with the
 window length. The horizon is therefore walked in windows that each commit one
 day and look one day further ahead, carrying the storage and the cycle count

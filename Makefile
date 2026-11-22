@@ -54,19 +54,6 @@ docker-shell:
 docker-test:
 	DEV=1 scripts/docker-run.sh --shell -c "pytest -o cache_dir=/tmp/pytest_cache"
 
-## Re-run every measurement the documents quote: the headline dispatch, the
-## two search methods over every horizon, the tolerance table, and the one-shot
-## MILPs behind tractability.md. About two hours; `results-quick` walks the same
-## path over short horizons, writing under data/results/reproduce/quick/.
-results:
-	uv run python scripts/reproduce_docs.py
-
-results-quick:
-	uv run python scripts/reproduce_docs.py --quick
-
-results-list:
-	uv run python scripts/reproduce_docs.py --list
-
 ## Redraw the figures the notes embed
 figures: $(FIGURES)
 

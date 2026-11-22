@@ -1,5 +1,5 @@
-# The solver Lambda: the package, its locked dependencies, the bundled prices
-# and the handler, on AWS's Python base image. Build from the repo root:
+# The solver Lambda: the package, its locked dependencies and the
+# handler, on AWS's Python base image. Build from the repo root:
 #
 #   docker buildx build --platform linux/arm64 -f services/solver/Dockerfile -t batteryplan-solver --load .
 #
@@ -10,7 +10,6 @@ FROM public.ecr.aws/lambda/python:3.12 AS base
 # matplotlib, a dependency of the package, wants a writable config dir; /tmp is
 # the only writable path on Lambda.
 ENV MPLCONFIGDIR=/tmp/matplotlib \
-    PRICES_XLSX=${LAMBDA_TASK_ROOT}/data/attachment_2_market_prices.xlsx \
     CONTRACTS_DIR=${LAMBDA_TASK_ROOT}/contracts
 
 # Dependencies from uv.lock: the package's own plus the `solver` group. boto3
@@ -24,7 +23,6 @@ RUN --mount=from=ghcr.io/astral-sh/uv:0.13.4,source=/uv,target=/usr/local/bin/uv
 
 # The package as source in the task root, next to the handler.
 COPY src/battery_plan/ ${LAMBDA_TASK_ROOT}/battery_plan/
-COPY data/raw/attachment_2_market_prices.xlsx ${LAMBDA_TASK_ROOT}/data/
 COPY contracts/*.schema.json ${LAMBDA_TASK_ROOT}/contracts/
 COPY services/solver/handler.py services/solver/local_worker.py ${LAMBDA_TASK_ROOT}/
 

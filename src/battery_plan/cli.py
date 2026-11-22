@@ -24,13 +24,13 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     inputs = subparsers.add_parser("inputs", help="Print the loaded battery spec and price data")
-    inputs.add_argument("--spec", default=BATTERY_SPEC_XLSX, help="Path to Attachment 1")
-    inputs.add_argument("--prices", default=MARKET_PRICES_XLSX, help="Path to Attachment 2")
+    inputs.add_argument("--spec", default=BATTERY_SPEC_XLSX, help="Path to the battery spec")
+    inputs.add_argument("--prices", default=MARKET_PRICES_XLSX, help="Path to the prices")
     inputs.set_defaults(func=_cmd_inputs)
 
     dispatch = subparsers.add_parser("dispatch", help="Solve the dispatch model and report profit")
-    dispatch.add_argument("--spec", default=BATTERY_SPEC_XLSX, help="Path to Attachment 1")
-    dispatch.add_argument("--prices", default=MARKET_PRICES_XLSX, help="Path to Attachment 2")
+    dispatch.add_argument("--spec", default=BATTERY_SPEC_XLSX, help="Path to the battery spec")
+    dispatch.add_argument("--prices", default=MARKET_PRICES_XLSX, help="Path to the prices")
     dispatch.add_argument("--start", help="First timestamp to dispatch over (default: all data)")
     dispatch.add_argument("--end", help="Last timestamp to dispatch over (default: all data)")
     dispatch.add_argument(

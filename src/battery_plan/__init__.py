@@ -1,4 +1,4 @@
-"""Battery dispatch model for the Aurora second-round technical exercise.
+"""Battery dispatch model.
 
 The package is split three ways:
 

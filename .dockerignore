@@ -1,4 +1,4 @@
-# The image builds its own environment and carries only data/raw.
+# The image builds its own environment and carries no data.
 .venv/
 .git/
 .mypy_cache/

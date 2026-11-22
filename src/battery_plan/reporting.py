@@ -742,7 +742,7 @@ class LogReporter(NullReporter):
     """One timestamped line per event, for a pipe, a log file or CI.
 
     No cursor control and no box drawing, because neither survives a redirect,
-    and progress is thinned to quarters so a three-year run does not write a
+    and progress is thinned to quarters so a long run does not write a
     thousand lines of percentage.
     """
 

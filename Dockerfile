@@ -23,11 +23,8 @@ ARG GROUPS=--no-dev
 COPY pyproject.toml uv.lock README.md ./
 RUN uv sync --frozen --no-install-project $GROUPS
 
-# Then the project. src/battery_plan/data_io/paths.py resolves the inputs
-# relative to the package, so the tree has to keep its shape: data/raw next to
-# src/, which is why the spreadsheets are copied rather than mounted.
+# Then the project.
 COPY src/ src/
-COPY data/raw/ data/raw/
 COPY scripts/ scripts/
 COPY tests/ tests/
 COPY docs/ docs/

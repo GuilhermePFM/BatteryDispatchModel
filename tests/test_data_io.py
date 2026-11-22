@@ -14,7 +14,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def test_battery_spec_matches_attachment_1() -> None:
+def test_battery_spec_matches_the_spreadsheet() -> None:
     spec = load_battery_spec()
 
     assert spec.max_charge_rate_mw == 2.0

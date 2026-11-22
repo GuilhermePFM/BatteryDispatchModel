@@ -1,6 +1,6 @@
 """Input/output: where the inputs live, how they are read and described.
 
-The spreadsheets supplied with the exercise, and the CSV a user uploads.
+The input spreadsheets, and the CSV a user uploads.
 """
 
 from battery_plan.data_io.loaders import (

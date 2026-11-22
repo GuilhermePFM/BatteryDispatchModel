@@ -1,5 +1,4 @@
-// The results page of a run: the readings of notebooks/02_results_analysis.py,
-// driven by the result payload (contracts/result.schema.json) alone.
+// The results page of a run, driven by the result payload (contracts/result.schema.json) alone.
 import { CheckCircle, WarningCircle } from "@phosphor-icons/react";
 import { useCallback, useState } from "react";
 import { hasData, isNum } from "../charts/adapters";

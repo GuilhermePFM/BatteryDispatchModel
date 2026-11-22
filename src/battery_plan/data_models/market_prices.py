@@ -1,4 +1,4 @@
-"""Prices for the two wholesale markets of Attachment 2."""
+"""Prices for the two wholesale markets of the price data."""
 
 from __future__ import annotations
 

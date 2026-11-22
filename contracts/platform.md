@@ -107,8 +107,8 @@ prefixes after 7 days.
   whose policy limits `content-length-range` to 5 MB and fixes the key.
 - `plans/<run_id>.csv`: written by the solver.
 
-The precomputed 2018–2020 scenario is not in this bucket: it is a static file
-of the site, `web/public/scenarios/full-2018-2020.json`, holding a run-record
+The precomputed scenario is not in this bucket: it is a static file
+of the site, `web/public/scenarios/default.json`, holding a run-record
 with status `succeeded` and the `result` object inline.
 
 ## HTTP API

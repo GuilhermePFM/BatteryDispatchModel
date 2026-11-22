@@ -1,8 +1,7 @@
 # Battery dispatch model
 
-Formulation of the battery dispatch problem for the Aurora second-round
-technical exercise: battery trading across two wholesale
-electricity markets over 2018–2020, as a price taker.
+Formulation of the battery dispatch problem: battery trading across two wholesale
+electricity markets, as a price taker.
 
 ---
 
@@ -20,8 +19,7 @@ prices, so the price series are exogenous inputs. They are also taken as
 second assumption dropped.
 
 The full methodology, this note and the stochastic one in a single typeset
-document, is in [`battery-dispatch.pdf`](battery-dispatch.pdf) (`make
-pdf-combined`).
+document, is built by `make pdf-combined`.
 
 The problem is posed as a mixed-integer linear program on a **common half-hourly
 axis**. Market 1 settles natively at that resolution; Market 2 settles hourly,
@@ -54,7 +52,7 @@ half hours of each hour.
 | $\overline{L}$ | 5000 | cycles | cycle life |
 | $\rho$ | $10^{-5}$ | /cycle | storage volume lost per equivalent full cycle |
 
-Parameter values are from Attachment 1. The spreadsheet quotes the degradation
+Parameter values are from the battery spec. The spreadsheet quotes the degradation
 rate in percent (0.001 %/cycle), so $\rho = 10^{-5}$ as a fraction. 
 
 ### Decision variables
@@ -200,7 +198,7 @@ commitment to deliver into Market 2 must be honoured for the full hour.
 
 ### 4.6 Cycle life
 
-The brief defines one cycle as charging to the maximum storage volume and then
+One cycle is defined as charging to the maximum storage volume and then
 discharging all of it, and allows the energy to be accumulated in parts. The
 equivalent full cycles used over the horizon are therefore the total energy
 throughput divided by the storage volume, and that total is capped by the
@@ -245,7 +243,7 @@ being a single number for the whole horizon. It would fail for a time-varying
 allowance $\overline{L}(t)$, such as a per-year quota, or for any count that
 could decrease, and the $\forall t$ form would then be the only correct one.
 
-Throughput is measured at the storage side, matching the brief's definition of a
+Throughput is measured at the storage side, matching the definition of a
 cycle in terms of stored volume: $d_1 + d_2$ is what leaves the store. The
 nominal $\overline{S}_{\max}$ is the denominator rather than the degraded
 $S_{\max}(t)$, which keeps the constraint linear.
@@ -271,11 +269,11 @@ drop the variable; the write-up keeps it because it names the quantity.
 
 ## 5. Assumptions and simplifications
 
-The brief invites simplification over completeness. Choices made here:
+The model favours simplicity over completeness. Choices made here:
 
-- **Price taker.** Stated in the brief; prices are exogenous.
+- **Price taker.** Prices are exogenous.
 - **Prices are known over the whole horizon.** The plan is chosen with
-  perfect foresight, which is what makes the result of §7 an upper bound on
+  perfect foresight, which is what makes the result an upper bound on
   what a policy without foresight could earn rather than a forecast of revenue. The
   stochastic formulation is in
   [`model-stochastic.md`](model-stochastic.md).
@@ -283,19 +281,17 @@ The brief invites simplification over completeness. Choices made here:
   state; the alternatives are to leave $S(0)$ free, or to impose a cyclic
   condition $S(T) = S(0)$ so the horizon neither starts nor ends with a
   windfall.
-- **The rate limits are battery capabilities, not grid limits.** Attachment 1
+- **The rate limits are battery capabilities, not grid limits.** the battery spec
   describes them as the power the battery can import from and export to the
   grid, which would put them on the grid side of the converter. They are read
   instead as limits on the battery's own charge and discharge power, so each
   bounds its variable directly. 
-- **The cycle budget is the full 5,000 over a three-year horizon.** The price
-  data covers three of the battery's ten calendar years, so spending the entire
-  cycle life within it implies retiring the asset early. Pro-rating to
-  $\tfrac{3}{10} \times 5000 = 1500$ cycles would be the alternative. Which is
-  right depends on whether the exercise is "maximise profit over this data" or
-  "value the asset over its life"; the former is what the brief asks for.
-- **Capex and opex do not enter the objective.** £500,000 capex and £5,000/year
-  fixed opex are fixed with respect to the dispatch decision, so they do not
+- **The cycle budget is spent over the horizon given.** Spending the entire
+  cycle life within it implies retiring the asset early. Pro-rating it to the
+  horizon's share of the calendar life would be the alternative. Which is right
+  depends on whether the goal is "maximise profit over this data" or "value the
+  asset over its life"; the former is the goal here.
+- **Capex and opex do not enter the objective.** They are fixed with respect to the dispatch decision, so they do not
   change the optimal plan; they belong to a separate economic assessment of
   the asset.
 
@@ -309,17 +305,8 @@ solved as a sequence of many small programs rather than one large one.
 
 ### Problem tractability
 
-Posed whole, the program carries one binary $u(t)$ for each of the 52,608
-periods. Solve time grows steeply with the window length: a fortnight solves in
-around 10 s, a month in 24 s and two months in 173 s, all proved optimal. (The
-shorter windows are solved with tuned HiGHS settings and the longer ones stock,
-so times either side of a fortnight are not directly comparable; see
-[`solver-parameter-tunning.md`](solver-parameter-tunning.md#they-apply-to-windows-only-and-the-cutoff-is-measured).)
-Posed whole, the program is 315,649 rows, 368,256 columns and 52,608 binaries;
-given an hour, HiGHS explored two nodes, returning a feasible plan worth
-£206,318.80 against a dual bound of £208,166.65, a 0.90% gap and £1,046 worse
-than the decomposition reaches in under three minutes. The full measurements are
-in [`tractability.md`](tractability.md).
+Posed whole, the program carries one binary $u(t)$ for each period, and solve
+time grows steeply with the window length.
 
 The horizon is therefore walked in windows. Each window solves
 $\text{commit} + \text{lookahead}$ periods, keeps the decisions of the
@@ -514,45 +501,8 @@ Both methods are implemented and both are selectable with
 being the default: it costs fewer passes and returns the bound above. They share
 one evaluation oracle and differ in the subproblem they ask it for: bisection
 reads one bit from a *capped* pass, the cutting-plane method a value and a
-subgradient from a *relaxed* one. The reason a capped pass admits no usable subgradient, the
-measured comparison of the two against exactly solved instances, and the
-validation of the bound are in
-[`cycle-value-experiments.md`](cycle-value-experiments.md); the architecture
-of the seam is in
+subgradient from a *relaxed* one. The architecture of the seam is in
 [`architecture.md`](../architecture.md#4-how-to-obtain-the-lagrangian-price-cutting-planes-and-bissection).
-
-### The cycle budget on this data
-
-With the full 5,000-cycle budget of §5 the *cap is never reached* and
-$\lambda^\star = 0$: the round-trip loss of §4.2 rules out the narrow spreads
-long before the cycle budget runs out, so the windows need no rationing and the
-decomposition loses only the foresight past its lookahead. Unrationed dispatch
-spends 3,443 cycles ([§7](results.md)), so under the pro-rated budget of 1,500 cycles the cap
-*would* bind and $\lambda$ would become active; what it is worth there has not
-been measured, since each pass re-solves the whole horizon.
-
-### How much foresight is enough
-
-One day of lookahead is sufficient on this data. Over June 2018:
-
-| Committed | Lookahead | Profit | Cycles |
-| --- | --- | --- | --- |
-| 1 day | none | £4,753 | 80.5 |
-| 1 day | 1 day | £4,785 | 81.4 |
-| 1 day | 2 days | £4,785 | 81.4 |
-| 7 days | 1 day | £4,785 | 81.4 |
-
-Deciding each day blind to the next costs 0.7%, and nothing is gained past the
-first day of lookahead: *committing a whole week at a time reaches the same
-profit as committing one day with one day in view*. That is what one would
-expect of a 4 MWh store that *can fill in two hours: its decisions do not reach
-far beyond the day they are taken in*, and the cycle budget, the one thing that
-would couple distant days, is not binding.
-
-## 7. Results
-
-The figures for 2018–2020, and how to read them, are in
-[`results.md`](results.md).
 
 ---
 

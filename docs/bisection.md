@@ -4,7 +4,6 @@
 certify.*
 
 [← README](../README.md) · [cycle budget](cycle-budget.md) ·
-[cycle-value experiments](model/cycle-value-experiments.md) ·
 [architecture](architecture.md) · [validation](validation.md) ·
 [glossary](glossary.md)
 
@@ -31,9 +30,6 @@ This page is the other one: a bisection on cycle use. It is kept for
   theory, so it is the easiest way to see what `λ` *is* before any dual
   machinery is introduced.
 
-Both methods are measured against each other, and against exactly solved
-instances, in
-[cycle-value experiments §2](model/cycle-value-experiments.md#2-what-each-method-costs-against-a-known-answer).
 Select this one with `battery-plan dispatch --search bisection`.
 
 ## What the search is searching over
@@ -140,7 +136,7 @@ cycle value applied, for the same single cycle.
 > **Monotonicity is per window, not proven for the composition.** Within one
 > window, from a fixed opening state, a higher charge can only reduce cycle
 > use. Across the horizon the handover moves with λ, so the windows no longer
-> start from a fixed state and total use is monotone on this data as an
+> start from a fixed state and total use is monotone as an
 > assumption rather than a theorem — which is exactly what the bisection
 > rests on.
 >

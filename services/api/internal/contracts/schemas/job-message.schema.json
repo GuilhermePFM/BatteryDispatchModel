@@ -41,7 +41,7 @@
           "required": ["source"],
           "properties": {
             "source": {
-              "description": "The 2018-2020 spreadsheets packaged with the solver.",
+              "description": "Prices packaged with the solver image, where the deployment has them.",
               "const": "bundled"
             }
           }

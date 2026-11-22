@@ -5,11 +5,10 @@
 Everything in that directory is an output of this script, so the examples
 cannot describe a payload the code no longer produces:
 
-* ``prices-template.csv`` — January 2018 of Attachment 2 in the upload format,
-  to the penny, read back through :func:`battery_plan.data_io.load_market_prices_csv` before
-  it is kept. January is away from the spring clock change, whose repeated
-  half hours the upload format does not allow;
-* ``run-request.example.json`` — three days on the bundled prices;
+* ``prices-template.csv`` — a synthetic January in the upload format, to the
+  penny, read back through :func:`battery_plan.data_io.load_market_prices_csv`
+  before it is kept;
+* ``run-request.example.json`` — three days of the template;
 * ``result.example.json`` — what that request solves to, through
   :func:`battery_plan.dispatch.run_dispatch` and
   :func:`battery_plan.analysis.build_result_payload`;
@@ -28,6 +27,9 @@ import json
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+import pandas as pd
+
 from battery_plan.analysis import build_result_payload
 from battery_plan.contracts import (
     BUNDLED_PRICES_SHA256,
@@ -37,7 +39,7 @@ from battery_plan.contracts import (
     prices_sha256,
     spec_from_request,
 )
-from battery_plan.data_io import load_market_prices, load_market_prices_csv, write_market_prices_csv
+from battery_plan.data_io import load_market_prices_csv, write_market_prices_csv
 from battery_plan.data_models import MarketPrices
 from battery_plan.dispatch import run_dispatch
 from battery_plan.reporting import ProgressEvent
@@ -48,7 +50,7 @@ EXAMPLES = Path(__file__).resolve().parents[1] / "contracts" / "examples"
 RUN_ID = "01JD3X7Q8RZK5V2N4M6P9T0WYA"
 USER_SUB = "3f1c9a2e-7b4d-4e8a-9c61-2d5f0b8e7a43"
 
-#: Attachment 1 as given, over the first three days of the data.
+#: The battery spec as given, over the first three days of the data.
 REQUEST: dict[str, Any] = {
     "battery": {
         "max_charge_rate_mw": 2,
@@ -81,12 +83,8 @@ UPLOAD_REQUEST: dict[str, Any] = {
 
 def main() -> int:
     template = EXAMPLES / "prices-template.csv"
-    prices = load_market_prices()
-    january = prices.between("2018-01-01", "2018-01-31 23:30")
-    # Quoted in pence; the spreadsheet stores some as 52.144999999999996.
-    january = MarketPrices(market_1=january.market_1.round(2), market_2=january.market_2.round(2))
-    write_market_prices_csv(january, template)
-    load_market_prices_csv(template)
+    write_market_prices_csv(_synthetic_january(), template)
+    prices = load_market_prices_csv(template)
 
     events: list[ProgressEvent] = []
     spec = spec_from_request(REQUEST)
@@ -143,6 +141,18 @@ def main() -> int:
     )
     print(f"-> {EXAMPLES}")
     return 0
+
+
+def _synthetic_january() -> MarketPrices:
+    """A daily price shape plus seeded noise; Market 2 holds each hour's price."""
+    index = pd.date_range("2018-01-01", "2018-01-31 23:30", freq="30min", name="timestamp")
+    noise = np.random.default_rng(0)
+    hours = index.hour + index.minute / 60
+    shape = 50 + 15 * np.sin(2 * np.pi * (hours - 11) / 24)
+    market_1 = pd.Series(shape + noise.normal(0, 3, len(index)), index=index).round(2)
+    hourly = pd.Series(shape + 1 + noise.normal(0, 2, len(index)), index=index)
+    market_2 = hourly.groupby(index.floor("h")).transform("first").round(2)
+    return MarketPrices(market_1=market_1, market_2=market_2)
 
 
 def _vector(name: str, request: dict[str, Any], prices_digest: str) -> dict[str, Any]:

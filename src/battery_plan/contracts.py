@@ -23,16 +23,15 @@ from battery_plan.data_models import BatterySpec
 from battery_plan.dispatch import DispatchConfig
 from battery_plan.modelling.cycle_value.searches import DEFAULT_SEARCH
 
-#: sha256 of ``data/raw/attachment_2_market_prices.xlsx``, the bundled
-#: 2018-2020 prices. A run on them hashes this in place of an upload's bytes.
+#: sha256 of ``data/raw/market_prices.xlsx``, the bundled
+#: prices. A run on them hashes this in place of an upload's bytes.
 BUNDLED_PRICES_SHA256 = "f26dc09b7eb4bcb3755b615c0595132937dee3dbb4b82e915648be7e53a95ce9"
 
 #: The search every web run uses; the request has no field for it.
 WEB_SEARCH = DEFAULT_SEARCH
 
 #: The window scheme of every web run: commit a day with the next in view.
-#: §6 finds that more foresight or longer commits add nothing on this data,
-#: so the request has no fields for them; the CLI keeps its flags.
+#: The request has no fields for longer ones; the CLI keeps its flags.
 WEB_COMMIT_DAYS = 1
 WEB_LOOKAHEAD_DAYS = 1
 

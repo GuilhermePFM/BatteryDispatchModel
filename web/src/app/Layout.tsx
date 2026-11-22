@@ -69,7 +69,7 @@ export function Layout() {
       </main>
       <footer className="site-footer">
         <div className="wrap">
-          <span>BatteryPlan, by Guilherme Machado. Prices are GB market data, 2018 to 2020.</span>
+          <span>BatteryPlan, by Guilherme Machado.</span>
           <nav aria-label="Footer">
             <a href={repoHome}>
               <GithubLogo size={15} aria-hidden="true" style={{ verticalAlign: "-2px", marginRight: 4 }} />

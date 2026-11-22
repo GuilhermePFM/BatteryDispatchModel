@@ -24,7 +24,6 @@ describe("extractMethodology on docs/model/model.md", () => {
     expect(sub).toContain("4.6 Cycle life");
     expect(sub).toContain("Lagrangian relaxation of the cycle budget");
     expect(sub).toContain("Minimising the dual: the cutting-plane method");
-    expect(sub).toContain("How much foresight is enough");
   });
 
   it("leaves out bisection, solver tuning and the stochastic model", () => {
@@ -36,13 +35,11 @@ describe("extractMethodology on docs/model/model.md", () => {
 
   it("removes only the offending sentence from a paragraph that still matters", () => {
     expect(markdown).toMatch(/taken as\s+\*\*known\*\*: the whole horizon is given before any decision is made\./);
-    expect(markdown).toMatch(/all proved optimal\.\s+Posed whole, the program is/);
     expect(markdown).toMatch(/\*\*Prices are known over the whole horizon\.\*\*/);
   });
 
   it("resolves the figure and points other documents at the repository", () => {
     expect(markdown).toContain("](/assets/cutting-plane.png)");
-    expect(markdown).toContain("https://example.org/repo/blob/main/docs/model/tractability.md");
     expect(markdown).toContain("https://example.org/repo/blob/main/scripts/plot_cutting_plane.py");
   });
 

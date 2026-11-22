@@ -3,7 +3,7 @@
 *Every term the model, the code and the write-up use, with the one word chosen
 for each idea — and the words deliberately not used.*
 
-[← README](../README.md) · [data](data.md) · [architecture](architecture.md) ·
+[← README](../README.md) · [architecture](architecture.md) ·
 [solve](solve.md) · [cycle budget](cycle-budget.md) ·
 [bisection](bisection.md) · [validation](validation.md)
 
@@ -119,15 +119,12 @@ name is already a *count* of half hours (`PERIODS_PER_DAY`, `commit_periods`,
 | `scripts/compare_pricers.py` · `scripts/sweep_pricers.py` | `compare_searches.py` · `sweep_searches.py` |
 | `scripts/sweep_pricers.py --pricer` | `scripts/sweep_searches.py --search` |
 | `scripts/solve_monolith.py` | `scripts/solve_exact.py` |
-| `docs/model/cycle-price-experiments.md` | `cycle-value-experiments.md` |
-| `docs/model/cycle-price-sweep.csv` · `cycle-price-long-horizons.csv` | `cycle-value-sweep.csv` · `cycle-value-long-horizons.csv` |
 | `tests/test_grid.py` · `test_rolling.py` · `test_milp.py` · `test_schedule.py` · `test_pricing.py` | `test_periods.py` · `test_rolling_horizon.py` · `test_window_problem.py` · `test_plan.py` · `test_cycle_value.py` |
 
 ## 3. The data
 
 **Market 1** — the half-hourly market. 48 prices per day, settled per
-settlement period. Its timestamp labels are unreliable at spring clock changes;
-see [data](data.md).
+settlement period. Its timestamp labels are unreliable at spring clock changes.
 
 **Market 2** — the hourly market. 24 prices per day. Its labels are taken as
 canonical and the time axis is relabelled from them. A trade here is committed
@@ -141,11 +138,11 @@ half-hourly axis: `timestamps`, `price_1`, `price_2`, equal length. Market 2's
 hourly price is repeated across the two half hours it covers; the pairing is
 positional, not by timestamp.
 
-**Horizon** — the whole span being dispatched over: 52,608 periods, 2018–2020.
+**Horizon** — the whole span being dispatched over.
 
 **Window** — a contiguous slice of the horizon handed to the solver as one MILP.
 
-**Battery spec** (`BatterySpec`) — Attachment 1 as loaded, in the
+**Battery spec** (`BatterySpec`) — the battery spec as loaded, in the
 spreadsheet's own units. **Model parameters** (`ModelParameters`) — the same
 numbers converted once into the model's units (§2).
 
@@ -226,7 +223,7 @@ plan. `RollingPolicy` is the formulation of `model/model.md`;
 decisions, the storage and cycle trajectories, and the revenue. Every figure
 quoted anywhere is recomputed from these columns.
 
-**Pass** — one run of a policy over the whole horizon, ≈77 s on this data. The
+**Pass** — one run of a policy over the whole horizon. The
 unit the search's cost is counted in.
 
 ## 7. The dual search
