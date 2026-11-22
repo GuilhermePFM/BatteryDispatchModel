@@ -5,12 +5,12 @@ variable "region" {
 }
 
 variable "github_repo" {
-  description = "The GitHub repository allowed to deploy, as <owner>/<name> (e.g. GuilhermePFM/batteryplan)."
+  description = "The GitHub repository allowed to deploy, as its OIDC subject shows it: <owner>/<name>, or <owner>@<id>/<name>@<id> on repositories with immutable subjects."
   type        = string
 
   validation {
-    condition     = can(regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", var.github_repo))
-    error_message = "Use the <owner>/<name> form."
+    condition     = can(regex("^[A-Za-z0-9_.-]+(@[0-9]+)?/[A-Za-z0-9_.-]+(@[0-9]+)?$", var.github_repo))
+    error_message = "Use the <owner>/<name> or <owner>@<id>/<name>@<id> form."
   }
 }
 
