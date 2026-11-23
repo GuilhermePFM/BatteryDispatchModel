@@ -25,10 +25,10 @@ export const BUNDLED_RUN_MONTH = "2026-11";
 /** The 24+0 backtest of docs/solve.md, by delivered hours. */
 const CAPTURE_HOURS = [2, 4, 6, 8];
 const MEASURED_CAPTURE: Record<Submarket, number[]> = {
-  SE: [0.981, 0.98, 0.978, 0.966],
-  S: [0.975, 0.972, 0.969, 0.956],
-  NE: [0.967, 0.965, 0.961, 0.95],
-  N: [0.968, 0.965, 0.961, 0.949],
+  SE: [0.983, 0.981, 0.977, 0.959],
+  S: [0.977, 0.974, 0.967, 0.947],
+  NE: [0.967, 0.965, 0.959, 0.941],
+  N: [0.968, 0.966, 0.96, 0.941],
 };
 
 /** The measured factor, interpolated between durations and held flat outside them. */

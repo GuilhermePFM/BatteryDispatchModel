@@ -7,7 +7,7 @@
     "battery": {
      "power_mw": 30,
      "volume_mwh": 130.1582746911937,
-     "max_charge_mw": 23.52941176470588,
+     "max_charge_mw": 30,
      "max_discharge_mw": 32.539568672798424,
      "charge_efficiency": 0.9219544457292888,
      "discharge_efficiency": 0.9219544457292888,
@@ -17,8 +17,8 @@
     "end": "2026-01-31"
    },
    "prices_sha256": "2431c61473ae39b0ed949364306974e6ee8b5b88d8d051d6bedb19a688c9b839",
-   "canonical": "{\"model_version\":\"pld-hourly-1\",\"prices_sha256\":\"2431c61473ae39b0ed949364306974e6ee8b5b88d8d051d6bedb19a688c9b839\",\"request\":{\"battery\":{\"charge_efficiency\":0.9219544457292888,\"degradation_pct_per_cycle\":0.001,\"discharge_efficiency\":0.9219544457292888,\"max_charge_mw\":23.52941176470588,\"max_discharge_mw\":32.539568672798424,\"power_mw\":30,\"volume_mwh\":130.1582746911937},\"end\":\"2026-01-31\",\"start\":\"2025-02-01\"}}",
-   "params_hash": "b4179fe898f1955655a0413b1e4e21624d000af3d8b01b8a6af044001388a6fd"
+   "canonical": "{\"model_version\":\"pld-hourly-1\",\"prices_sha256\":\"2431c61473ae39b0ed949364306974e6ee8b5b88d8d051d6bedb19a688c9b839\",\"request\":{\"battery\":{\"charge_efficiency\":0.9219544457292888,\"degradation_pct_per_cycle\":0.001,\"discharge_efficiency\":0.9219544457292888,\"max_charge_mw\":30,\"max_discharge_mw\":32.539568672798424,\"power_mw\":30,\"volume_mwh\":130.1582746911937},\"end\":\"2026-01-31\",\"start\":\"2025-02-01\"}}",
+   "params_hash": "5b1461761b42d2d2077806da15bc16703adfc47db1edb6e8fe15cba02c87c910"
   },
   {
    "name": "uploaded prices: prices_key is left out, the file's sha256 stands in",
@@ -26,7 +26,7 @@
     "battery": {
      "power_mw": 30,
      "volume_mwh": 130.1582746911937,
-     "max_charge_mw": 23.52941176470588,
+     "max_charge_mw": 30,
      "max_discharge_mw": 32.539568672798424,
      "charge_efficiency": 0.9219544457292888,
      "discharge_efficiency": 0.9219544457292888,
@@ -38,8 +38,8 @@
     "prices_key": "uploads/abababababababababababababababababababababababababababababababab.csv"
    },
    "prices_sha256": "abababababababababababababababababababababababababababababababab",
-   "canonical": "{\"model_version\":\"pld-hourly-1\",\"prices_sha256\":\"abababababababababababababababababababababababababababababababab\",\"request\":{\"battery\":{\"charge_efficiency\":0.9219544457292888,\"degradation_pct_per_cycle\":0.000005,\"discharge_efficiency\":0.9219544457292888,\"max_charge_mw\":23.52941176470588,\"max_discharge_mw\":32.539568672798424,\"power_mw\":30,\"volume_mwh\":130.1582746911937},\"cycle_budget\":4.5,\"end\":\"2026-01-31\",\"start\":\"2025-02-01\"}}",
-   "params_hash": "630612da4338cfe570eaf7ed0bae1dfb99771ecb3c277b6a492cce215c14d419"
+   "canonical": "{\"model_version\":\"pld-hourly-1\",\"prices_sha256\":\"abababababababababababababababababababababababababababababababab\",\"request\":{\"battery\":{\"charge_efficiency\":0.9219544457292888,\"degradation_pct_per_cycle\":0.000005,\"discharge_efficiency\":0.9219544457292888,\"max_charge_mw\":30,\"max_discharge_mw\":32.539568672798424,\"power_mw\":30,\"volume_mwh\":130.1582746911937},\"cycle_budget\":4.5,\"end\":\"2026-01-31\",\"start\":\"2025-02-01\"}}",
+   "params_hash": "de88137bf266886d2097e5efbf574f4809c296b5d2ad11ab8eca2ec4ae128836"
   }
  ]
 }

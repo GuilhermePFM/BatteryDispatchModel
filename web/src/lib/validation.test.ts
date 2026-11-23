@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import example from "../../../contracts/examples/v2/run-request.example.json";
 import {
   BATTERY_FIELDS,
+  automaticRates,
   buildRequest,
   contractWarnings,
   CYCLE_BUDGET_FIELD,
@@ -24,11 +25,12 @@ const encode = (text: string) => new TextEncoder().encode(text);
 describe("schema-driven fields", () => {
   it("pre-fills the auction's smallest battery, 4 h by default", () => {
     const values = defaultValues();
-    expect(BATTERY_FIELDS).toHaveLength(5);
+    expect(BATTERY_FIELDS).toHaveLength(6);
     expect(values.battery.power_mw).toBe("30");
     expect(values.battery.duration_hours).toBe("4");
     expect(values.battery.round_trip_efficiency).toBe("0.85");
-    expect(values.battery.recharge_hours).toBe("6");
+    expect(values.battery.charge_rate_mw).toBe("");
+    expect(values.battery.discharge_rate_mw).toBe("");
     expect(values.battery.degradation_pct_per_cycle).toBe("0.001");
     expect(values.cycle_budget).toBe("");
   });
@@ -134,7 +136,8 @@ describe("buildRequest", () => {
     const values = valuesFromRequest(example);
     expect(values.battery.duration_hours).toBe("4");
     expect(values.battery.round_trip_efficiency).toBe("0.85");
-    expect(values.battery.recharge_hours).toBe("6");
+    expect(values.battery.charge_rate_mw).toBe("");
+    expect(values.battery.discharge_rate_mw).toBe("");
     const request = buildRequest(values);
     for (const key of Object.keys(example.battery) as (keyof typeof example.battery)[]) {
       expect(request.battery[key]).toBeCloseTo(example.battery[key], 9);
@@ -147,8 +150,33 @@ describe("buildRequest", () => {
     const b = physicalBattery(defaultValues());
     expect(b.volume_mwh * b.discharge_efficiency).toBeCloseTo(120, 9);
     expect(b.max_discharge_mw * b.discharge_efficiency).toBeCloseTo(30, 9);
-    expect(b.max_charge_mw * b.charge_efficiency).toBeCloseTo(b.volume_mwh / 6, 9);
+    expect(b.max_charge_mw).toBe(30);
     expect(b.charge_efficiency * b.discharge_efficiency).toBeCloseTo(0.85, 9);
+  });
+
+  it("takes explicit rates at the grid and rebuilds them", () => {
+    const values = { ...defaultValues(), battery: { ...defaultValues().battery, charge_rate_mw: "28", discharge_rate_mw: "25" } };
+    const b = physicalBattery(values);
+    expect(b.max_charge_mw).toBe(28);
+    expect(b.max_discharge_mw * b.discharge_efficiency).toBeCloseTo(25, 9);
+    const back = valuesFromRequest({ battery: b, start: values.start, end: values.end });
+    expect(Number(back.battery.charge_rate_mw)).toBeCloseTo(28, 9);
+    expect(Number(back.battery.discharge_rate_mw)).toBeCloseTo(25, 9);
+  });
+
+  it("caps both rates at the power delivered", () => {
+    const withRates = (charge_rate_mw: string, discharge_rate_mw: string) => ({ ...defaultValues(), battery: { ...defaultValues().battery, charge_rate_mw, discharge_rate_mw } });
+    expect(validate(withRates("30", "30"))).toEqual({});
+    expect(validate(withRates("30.1", "30"))["battery.charge_rate_mw"]).toMatch(/At most the power/);
+    expect(validate(withRates("30", "30.1"))["battery.discharge_rate_mw"]).toMatch(/At most the power/);
+  });
+
+  it("follows the battery while the rates are empty", () => {
+    const values = { ...defaultValues(), battery: { ...defaultValues().battery, power_mw: "60" } };
+    const rates = automaticRates(values)!;
+    expect(rates.dischargeMw).toBe(60);
+    expect(rates.chargeMw).toBe(60);
+    expect(physicalBattery(values).max_charge_mw).toBe(60);
   });
 
   it("adds cycle_budget and prices_key when present", () => {
@@ -174,10 +202,11 @@ describe("the auction's sizing warnings", () => {
   it("names each contract limit", () => {
     expect(contractWarnings(withBattery({ duration_hours: "3" }))[0]).toMatch(/4 h/);
     expect(contractWarnings(withBattery({ round_trip_efficiency: "0.8" }))[0]).toMatch(/0.85/);
-    expect(contractWarnings(withBattery({ recharge_hours: "7" }))[0]).toMatch(/6 h/);
-    // CRCAP 5.1.1(vii): the limit is on the contracted 4 h, so 8 h of volume may take 12 h.
-    expect(contractWarnings(withBattery({ duration_hours: "8", recharge_hours: "12" }))).toEqual([]);
-    expect(contractWarnings(withBattery({ duration_hours: "8", recharge_hours: "12.5" }))[0]).toMatch(/6 h/);
+    expect(contractWarnings(withBattery({ charge_rate_mw: "23" }))[0]).toMatch(/6 h/);
+    expect(contractWarnings(withBattery({ discharge_rate_mw: "29" }))[0]).toMatch(/discharge rate/);
+    // CRCAP 5.1.1(vii): the limit is on the contracted 4 h, so 8 h of volume needs no faster charger.
+    expect(contractWarnings(withBattery({ duration_hours: "8", charge_rate_mw: "23.6" }))).toEqual([]);
+    expect(contractWarnings(withBattery({ duration_hours: "8", charge_rate_mw: "23" }))[0]).toMatch(/6 h/);
   });
 });
 

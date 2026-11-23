@@ -49,7 +49,7 @@ REQUEST: dict[str, Any] = {
     "battery": {
         "power_mw": 30,
         "volume_mwh": _VOLUME,
-        "max_charge_mw": _VOLUME / (6 * _ONE_WAY),
+        "max_charge_mw": 30,
         "max_discharge_mw": 30 / _ONE_WAY,
         "charge_efficiency": _ONE_WAY,
         "discharge_efficiency": _ONE_WAY,

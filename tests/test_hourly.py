@@ -172,9 +172,8 @@ def test_the_default_sizing_meets_the_contract_exactly() -> None:
     assert CRCAP_LIMITS.contract_cycles_per_physical(battery) == pytest.approx(1.0)
     assert battery.round_trip_efficiency == pytest.approx(0.85)
     assert battery.discharge_efficiency * battery.volume_mwh == pytest.approx(120.0)
-    assert battery.max_charge_mw * battery.charge_efficiency == pytest.approx(
-        battery.volume_mwh / 6
-    )
+    assert battery.max_charge_mw == pytest.approx(30.0)
+    assert battery.max_discharge_mw * battery.discharge_efficiency == pytest.approx(30.0)
 
 
 @pytest.mark.parametrize(

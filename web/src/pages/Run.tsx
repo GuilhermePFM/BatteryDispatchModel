@@ -8,6 +8,7 @@ import { api, ApiError, describeError, uploadToPresigned } from "../lib/api";
 import { day, num, pct } from "../lib/format";
 import { sha256Hex } from "../lib/sha256";
 import {
+  automaticRates,
   BATTERY_FIELDS,
   BUNDLED_END,
   BUNDLED_START,
@@ -76,10 +77,11 @@ interface NumberFieldProps {
   error?: string;
   optional?: boolean;
   help?: string;
+  placeholder?: string;
   onChange: (value: string) => void;
 }
 
-function NumberField({ field, name, value, error, optional, help, onChange }: NumberFieldProps) {
+function NumberField({ field, name, value, error, optional, help, placeholder, onChange }: NumberFieldProps) {
   const id = `f-${name}`;
   return (
     <div className="field">
@@ -98,7 +100,7 @@ function NumberField({ field, name, value, error, optional, help, onChange }: Nu
         autoComplete="off"
         spellCheck={false}
         value={value}
-        placeholder={optional ? "no budget" : undefined}
+        placeholder={placeholder ?? (optional ? "no budget" : undefined)}
         aria-invalid={error ? true : undefined}
         aria-describedby={`${id}-help`}
         onChange={(e) => onChange(e.target.value)}
@@ -254,7 +256,9 @@ export function Run() {
   const dateMax = fileInfo?.lastDay && !fileInfo.problem ? fileInfo.lastDay : BUNDLED_END;
   const busy = phase !== "idle";
   const warnings = contractWarnings(values);
-  const sized = errors["battery.power_mw"] || errors["battery.duration_hours"] || errors["battery.round_trip_efficiency"] || errors["battery.recharge_hours"] ? null : physicalBattery(values);
+  const sized = errors["battery.power_mw"] || errors["battery.duration_hours"] || errors["battery.round_trip_efficiency"] || errors["battery.charge_rate_mw"] || errors["battery.discharge_rate_mw"] ? null : physicalBattery(values);
+  const automatic = automaticRates(values);
+  const automaticMw = (key: string) => (key === "charge_rate_mw" ? automatic?.chargeMw : key === "discharge_rate_mw" ? automatic?.dischargeMw : undefined);
 
   return (
     <div className="page">
@@ -271,18 +275,24 @@ export function Run() {
           <div>
             <fieldset className="group">
               <legend>The battery</legend>
-              <p className="group-note">Defaults are the smallest battery the auction accepts: 30 MW, 4 h delivered, 85% round trip, recharged in 6 h.</p>
+              <p className="group-note">Defaults are the smallest battery the auction accepts: 30 MW, 4 h delivered, 85% round trip, charging and discharging at 30 MW.</p>
               <div className="fields">
-                {BATTERY_FIELDS.map((field) => (
-                  <NumberField
-                    key={field.key}
-                    field={field}
-                    name={field.key}
-                    value={values.battery[field.key as keyof FormValues["battery"]]}
-                    error={shown[`battery.${field.key}`]}
-                    onChange={(v) => setBattery(field.key, v)}
-                  />
-                ))}
+                {BATTERY_FIELDS.map((field) => {
+                  const auto = automaticMw(field.key);
+                  return (
+                    <NumberField
+                      key={field.key}
+                      field={auto === undefined ? field : { ...field, max: Math.min(field.max, auto) }}
+                      name={field.key}
+                      value={values.battery[field.key as keyof FormValues["battery"]]}
+                      error={shown[`battery.${field.key}`]}
+                      optional={field.optional}
+                      placeholder={field.optional ? (auto === undefined ? "automatic" : `automatic: ${num(auto, 2)}`) : undefined}
+                      help={field.optional ? `${field.description} Empty follows the battery.` : undefined}
+                      onChange={(v) => setBattery(field.key, v)}
+                    />
+                  );
+                })}
               </div>
               <p className="derived">
                 {rt ? (
@@ -296,7 +306,9 @@ export function Run() {
                 {sized ? (
                   <>
                     {" "}
-                    Nominal volume <span className="num">{num(sized.volume_mwh, 1)} MWh</span>, charging at up to <span className="num">{num(sized.max_charge_mw, 1)} MW</span>.
+                    Nominal volume <span className="num">{num(sized.volume_mwh, 1)} MWh</span>, charging at up to <span className="num">{num(sized.max_charge_mw, 2)} MW</span> and discharging at up to{" "}
+                    <span className="num">{num(sized.max_discharge_mw * sized.discharge_efficiency, 2)} MW</span>. A full recharge takes{" "}
+                    <span className="num">{num(sized.volume_mwh / (sized.charge_efficiency * sized.max_charge_mw), 2)} h</span>.
                   </>
                 ) : null}
               </p>

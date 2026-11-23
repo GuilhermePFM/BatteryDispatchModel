@@ -77,21 +77,25 @@ class HourlyBattery:
         *,
         hours: float = 4.0,
         round_trip_efficiency: float = 0.85,
-        recharge_hours: float = 6.0,
+        recharge_hours: float | None = None,
         degradation_per_cycle: float = 1e-5,
         cycle_budget: float | None = None,
     ) -> HourlyBattery:
-        """The §2 defaults: ``hours`` delivered at ``power_mw``, recharged in ``recharge_hours``."""
+        """The §2 defaults: ``hours`` delivered at ``power_mw``, charging at ``power_mw``.
+
+        ``recharge_hours`` replaces that charge rate with the one that refills the store in time.
+        """
         if not 0 < round_trip_efficiency <= 1:
             raise ValueError("round-trip efficiency must be in (0, 1]")
-        if hours <= 0 or recharge_hours <= 0:
+        if hours <= 0 or (recharge_hours is not None and recharge_hours <= 0):
             raise ValueError("durations must be positive")
         one_way = math.sqrt(round_trip_efficiency)
         volume = hours * power_mw / one_way
+        charge = power_mw if recharge_hours is None else volume / (recharge_hours * one_way)
         return cls(
             power_mw=power_mw,
             volume_mwh=volume,
-            max_charge_mw=volume / (recharge_hours * one_way),
+            max_charge_mw=charge,
             max_discharge_mw=power_mw / one_way,
             charge_efficiency=one_way,
             discharge_efficiency=one_way,
