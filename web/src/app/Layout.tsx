@@ -69,7 +69,7 @@ export function Layout() {
       </main>
       <footer className="site-footer">
         <div className="wrap">
-          <span>BatteryPlan, by Guilherme Machado.</span>
+          <span>BatteryPlan, by Guilherme Machado. Prices are the CCEE hourly PLD, January 2025 to November 2026.</span>
           <nav aria-label="Footer">
             <a href={repoHome}>
               <GithubLogo size={15} aria-hidden="true" style={{ verticalAlign: "-2px", marginRight: 4 }} />

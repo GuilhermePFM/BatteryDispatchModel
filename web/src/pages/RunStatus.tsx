@@ -1,7 +1,7 @@
 import { ArrowCounterClockwise, Check, DownloadSimple, LinkSimple, WarningCircle } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
-import type { Progress, RunRecord } from "../contracts/types";
+import { isCurrentRecord, type Progress, type RunRecord } from "../contracts/types";
 import { Dashboard } from "../dashboard/Dashboard";
 import { api, ApiError, describeError } from "../lib/api";
 import { day, duration, num, pct } from "../lib/format";
@@ -10,18 +10,11 @@ import { DRAFT_KEY } from "./Run";
 
 const POLL_MS = 3000;
 
-const PHASES: Record<string, string> = {
-  inputs: "Reading the prices",
-  horizon: "Setting up the horizon",
-  calibrate: "Searching for the cycle value",
-  recover: "Building the final plan",
-  done: "Writing the results",
-};
-
 function phaseLabel(progress: Progress | undefined, status: RunRecord["status"]): string {
   if (status === "queued") return "Waiting for a solver";
   if (!progress) return "Starting";
-  return PHASES[progress.phase] ?? progress.phase;
+  if (progress.phase === "done") return "Writing the results";
+  return progress.submarket && progress.case ? `Solving ${progress.submarket}, ${progress.case}` : "Solving";
 }
 
 function Fact({ k, v }: { k: string; v: string }) {
@@ -39,7 +32,6 @@ function ProgressPanel({ record }: { record: RunRecord }) {
   const p = record.progress;
   const queued = record.status === "queued";
   const fraction = p ? Math.max(0, Math.min(1, p.fraction)) : 0;
-  const passes = p?.passes_estimated ?? null;
   return (
     <>
       <div
@@ -54,13 +46,12 @@ function ProgressPanel({ record }: { record: RunRecord }) {
       </div>
       <div className="progress-facts">
         <Fact k="Done" v={queued || !p ? "n/a" : pct(fraction, 0)} />
-        <Fact k="Pass" v={p && p.pass_index > 0 ? `${p.pass_index}${passes ? ` of ~${passes}` : ""}` : "n/a"} />
-        <Fact k="Cycle value" v={p ? `£${num(p.cycle_value, 2)}` : "n/a"} />
+        <Fact k="Programs" v={p ? `${p.cases_done} of ${p.cases_total}` : "n/a"} />
+        <Fact k="In flight" v={p?.submarket && p.case ? `${p.submarket}, ${p.case}` : "n/a"} />
         <Fact k="Elapsed" v={p ? duration(p.elapsed) : "n/a"} />
       </div>
       <p className="help">
-        The first pass solves the horizon with cycles free. If the plan stays inside the cycle budget that pass is the answer, and the bar jumps from about half
-        way to the end. If it does not, each further pass prices a cycle higher until the budget holds.
+        Each submarket is solved twice, as a merchant asset and under the capacity contract. A battery that cannot meet the contract runs the four merchant programs only.
       </p>
     </>
   );
@@ -71,7 +62,7 @@ function RequestSummary({ record }: { record: RunRecord }) {
   const b = r.battery;
   return (
     <p className="dash-meta">
-      {day(r.start)} to {day(r.end)}. {num(b.max_discharge_rate_mw, 1)} MW, {num(b.max_storage_volume_mwh, 1)} MWh,{" "}
+      {day(r.start)} to {day(r.end)}. {num(b.power_mw, 1)} MW, {num(b.volume_mwh, 1)} MWh,{" "}
       {r.cycle_budget !== undefined ? `${num(r.cycle_budget)} cycle budget, ` : ""}
       {r.prices_key ? "uploaded prices" : "bundled prices"}.
     </p>
@@ -140,18 +131,33 @@ function RunStatusView({ id }: { id: string }) {
     }
   }
 
-  const status = record?.status;
-  const result = record?.result;
+  const stale = record !== null && !isCurrentRecord(record);
+  const status = stale ? undefined : record?.status;
+  const result = stale ? undefined : record?.result;
 
   return (
     <div className="page">
       <div className="wrap">
         <div className="page-head">
-          <h1>{status === "succeeded" ? "Your plan" : status === "failed" ? "The run failed" : "Planning your battery"}</h1>
-          {record ? <RequestSummary record={record} /> : null}
+          <h1>{stale ? "An older run" : status === "succeeded" ? "Your plan" : status === "failed" ? "The run failed" : "Planning your battery"}</h1>
+          {record && !stale ? <RequestSummary record={record} /> : null}
         </div>
 
-        {failure && !record ? (
+        {stale ? (
+          <div className="status-panel">
+            <div className="banner" role="status">
+              <WarningCircle size={18} aria-hidden="true" />
+              <span>
+                <span className="banner-title">This run predates the current model.</span> It was solved for another market, so its result cannot be shown here. Start a new run with the hourly PLD.
+              </span>
+            </div>
+            <div className="actions">
+              <Link className="btn btn-primary" to="/run">
+                Start a run
+              </Link>
+            </div>
+          </div>
+        ) : failure && !record ? (
           <div className="status-panel">
             <div className="banner error" role="alert">
               <WarningCircle size={18} aria-hidden="true" />
@@ -167,6 +173,7 @@ function RunStatusView({ id }: { id: string }) {
           </div>
         ) : !record ? (
           <div className="status-panel">
+            {/* Nothing to show until the first poll answers. */}
             <div className="progress indeterminate">
               <span />
             </div>
@@ -220,7 +227,7 @@ function RunStatusView({ id }: { id: string }) {
             <div className="dashboard" style={{ paddingTop: 0 }}>
               {result ? (
                 <div style={{ marginTop: 28 }}>
-                  <Dashboard result={result} />
+                  <Dashboard result={result} runMonth={record?.created_at.slice(0, 7)} />
                 </div>
               ) : (
                 <div className="banner error" style={{ marginTop: 24 }}>

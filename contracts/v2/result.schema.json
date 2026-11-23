@@ -1,0 +1,287 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://batteryplan.invalid/contracts/v2/result.schema.json",
+  "title": "Run result, version 2",
+  "description": "What battery_plan.result_v2.build_result returns: aggregates for every solved case and the detail of one. Values are nominal BRL at the prices' own dates; the IPCA restatement of model.md §8.3 happens in the browser from the monthly blocks. At most 300 KB as compact JSON.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "model_version", "horizon", "battery", "eligibility", "ranking", "cases", "detail", "solve_seconds"],
+  "properties": {
+    "version": {
+      "const": 2
+    },
+    "model_version": {
+      "const": "pld-hourly-1"
+    },
+    "horizon": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "end", "days", "hours"],
+      "properties": {
+        "start": {"type": "string", "format": "date"},
+        "end": {"type": "string", "format": "date"},
+        "days": {"type": "integer", "minimum": 365, "maximum": 731},
+        "hours": {"type": "integer", "minimum": 8760, "maximum": 17544}
+      }
+    },
+    "battery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "power_mw",
+        "volume_mwh",
+        "max_charge_mw",
+        "max_discharge_mw",
+        "charge_efficiency",
+        "discharge_efficiency",
+        "round_trip_efficiency",
+        "degradation_pct_per_cycle",
+        "duration_hours",
+        "contract_cycles_per_physical",
+        "cycle_budget"
+      ],
+      "properties": {
+        "power_mw": {"type": "number", "exclusiveMinimum": 0},
+        "volume_mwh": {"type": "number", "exclusiveMinimum": 0},
+        "max_charge_mw": {"type": "number", "exclusiveMinimum": 0},
+        "max_discharge_mw": {"type": "number", "exclusiveMinimum": 0},
+        "charge_efficiency": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+        "discharge_efficiency": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+        "round_trip_efficiency": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+        "degradation_pct_per_cycle": {"type": "number", "minimum": 0},
+        "duration_hours": {
+          "description": "Hours at full power that one full store delivers to the grid.",
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "contract_cycles_per_physical": {
+          "description": "kappa of model.md §2.",
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "cycle_budget": {"type": ["number", "null"], "minimum": 0}
+      }
+    },
+    "eligibility": {
+      "description": "How the battery stands against the auction. Failing the sizing rules removes the contracted case; being under the minimum power is a warning only.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_eligible", "contract_shortfalls", "below_minimum_power", "minimum_power_mw"],
+      "properties": {
+        "contract_eligible": {"type": "boolean"},
+        "contract_shortfalls": {"type": "array", "items": {"type": "string"}},
+        "below_minimum_power": {"type": "boolean"},
+        "minimum_power_mw": {"type": "number", "exclusiveMinimum": 0}
+      }
+    },
+    "ranking": {
+      "description": "Submarkets from best to worst by the merchant balanced year (model.md §6).",
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["rank", "submarket", "balanced_year_brl", "last_twelve_months_brl", "regret_brl_per_year"],
+        "properties": {
+          "rank": {"type": "integer", "minimum": 1, "maximum": 4},
+          "submarket": {"$ref": "#/$defs/submarket"},
+          "balanced_year_brl": {"type": "number"},
+          "last_twelve_months_brl": {"type": "number"},
+          "regret_brl_per_year": {"type": "number", "minimum": 0}
+        }
+      }
+    },
+    "cases": {
+      "description": "One entry per solved program: 8, or the 4 merchant ones when the battery cannot meet the contract.",
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 8,
+      "items": {"$ref": "#/$defs/case"}
+    },
+    "detail": {
+      "description": "Series of one case: the merchant case of the top-ranked submarket.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["submarket", "case", "daily", "profile", "week", "net_power"],
+      "properties": {
+        "submarket": {"$ref": "#/$defs/submarket"},
+        "case": {"$ref": "#/$defs/business_case"},
+        "daily": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["date", "value_brl", "cycles", "price_mean", "price_min", "price_max", "storage_end_mwh"],
+          "properties": {
+            "date": {"$ref": "#/$defs/dates"},
+            "value_brl": {"$ref": "#/$defs/numbers"},
+            "cycles": {"$ref": "#/$defs/numbers"},
+            "price_mean": {"$ref": "#/$defs/numbers"},
+            "price_min": {"$ref": "#/$defs/numbers"},
+            "price_max": {"$ref": "#/$defs/numbers"},
+            "storage_end_mwh": {"$ref": "#/$defs/numbers"}
+          }
+        },
+        "profile": {
+          "description": "The mean day, one row per local hour.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["hour", "price", "charge_mw", "discharge_mw"],
+          "properties": {
+            "hour": {
+              "type": "array",
+              "minItems": 24,
+              "maxItems": 24,
+              "items": {"type": "integer", "minimum": 0, "maximum": 23}
+            },
+            "price": {"$ref": "#/$defs/numbers"},
+            "charge_mw": {"$ref": "#/$defs/numbers"},
+            "discharge_mw": {"$ref": "#/$defs/numbers"}
+          }
+        },
+        "week": {
+          "description": "Seven days hour by hour: the run of seven with the median value.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["hora", "price", "charge_mw", "discharge_mw", "storage_mwh"],
+          "properties": {
+            "hora": {
+              "type": "array",
+              "minItems": 168,
+              "maxItems": 168,
+              "items": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:00$"}
+            },
+            "price": {"$ref": "#/$defs/numbers"},
+            "charge_mw": {"$ref": "#/$defs/numbers"},
+            "discharge_mw": {"$ref": "#/$defs/numbers"},
+            "storage_mwh": {"$ref": "#/$defs/numbers"}
+          }
+        },
+        "net_power": {
+          "description": "The heatmap: one row of 24 hours per day, net power to the grid in thousandths of power_mw (negative while charging).",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["date", "permille"],
+          "properties": {
+            "date": {"$ref": "#/$defs/dates"},
+            "permille": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "minItems": 24,
+                "maxItems": 24,
+                "items": {"type": "integer"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "solve_seconds": {
+      "description": "Wall-clock seconds of the whole portfolio.",
+      "type": "number",
+      "minimum": 0
+    }
+  },
+  "$defs": {
+    "submarket": {
+      "enum": ["SE", "S", "NE", "N"]
+    },
+    "business_case": {
+      "enum": ["contracted", "merchant"]
+    },
+    "numbers": {
+      "type": "array",
+      "items": {"type": "number"}
+    },
+    "dates": {
+      "type": "array",
+      "items": {"type": "string", "format": "date"}
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "submarket",
+        "case",
+        "value_brl",
+        "balanced_year_brl",
+        "last_twelve_months_brl",
+        "physical_cycles",
+        "cycles_per_year",
+        "max_injection_hours",
+        "method",
+        "binary_days",
+        "solve_seconds",
+        "monthly"
+      ],
+      "properties": {
+        "submarket": {"$ref": "#/$defs/submarket"},
+        "case": {"$ref": "#/$defs/business_case"},
+        "value_brl": {
+          "description": "The §3 objective over the horizon. Merchant: a perfect-foresight ceiling. Contracted: the value of the proxy dispatch, which is not revenue (CRCAP 5.6).",
+          "type": "number"
+        },
+        "balanced_year_brl": {
+          "description": "§8.3 with no IPCA restatement: each calendar month carries its own weight.",
+          "type": "number"
+        },
+        "last_twelve_months_brl": {"type": "number"},
+        "physical_cycles": {"type": "number", "minimum": 0},
+        "cycles_per_year": {
+          "description": "nu of §8.4: physical cycles of a balanced year.",
+          "type": "number",
+          "minimum": 0
+        },
+        "max_injection_hours": {
+          "description": "Most hours of injection in any one day.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 24
+        },
+        "method": {"enum": ["lp", "lp-relaxation", "milp"]},
+        "binary_days": {"type": "integer", "minimum": 0},
+        "solve_seconds": {"type": "number", "minimum": 0},
+        "monthly": {"$ref": "#/$defs/monthly"}
+      }
+    },
+    "monthly": {
+      "description": "One row per calendar month of the horizon, what the browser needs for §8.3 (restated balanced year) and for the reimbursement of CRCAP 8.1 in §8.5.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["month", "days", "value_brl", "charge_mwh", "injected_mwh", "charge_cost_brl", "storage_end_mwh", "injections"],
+      "properties": {
+        "month": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}$"}
+        },
+        "days": {
+          "description": "Days of this month inside the horizon.",
+          "type": "array",
+          "items": {"type": "integer", "minimum": 1, "maximum": 31}
+        },
+        "value_brl": {"$ref": "#/$defs/numbers"},
+        "charge_mwh": {
+          "description": "E_rec of CRCAP 8.1: energy imported to charge.",
+          "$ref": "#/$defs/numbers"
+        },
+        "injected_mwh": {
+          "description": "E_inj of CRCAP 8.1: energy delivered to the grid.",
+          "$ref": "#/$defs/numbers"
+        },
+        "charge_cost_brl": {
+          "description": "CUSTO of CRCAP 8.1: the sum over the month's hours of charging energy times the PLD.",
+          "$ref": "#/$defs/numbers"
+        },
+        "storage_end_mwh": {
+          "description": "EARM at the end of the month; the month before the first is zero (S_0 of §4.2).",
+          "$ref": "#/$defs/numbers"
+        },
+        "injections": {
+          "description": "Runs of consecutive injecting hours that start in the month. CRCAP 8.1.3 waives the reimbursement under 4 injections, partial ones included, without defining one injection; a run of hours is this project's reading.",
+          "type": "array",
+          "items": {"type": "integer", "minimum": 0}
+        }
+      }
+    }
+  }
+}

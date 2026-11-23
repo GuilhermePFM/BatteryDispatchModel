@@ -69,7 +69,7 @@ func TestUnitRoutes(t *testing.T) {
 		{"POST", "/api/runs", "", "{}", 401, "unauthorized"},
 		{"POST", "/api/uploads", "", "{}", 401, "unauthorized"},
 		{"POST", "/api/runs", "dev:u:u@x", "{", 400, "request_invalid"},
-		{"POST", "/api/runs", "dev:u:u@x", `{"start":"2018-01-01"}`, 400, "request_invalid"},
+		{"POST", "/api/runs", "dev:u:u@x", `{"start":"2025-01-20"}`, 400, "request_invalid"},
 		{"POST", "/api/runs", "dev:u:u@x", strings.Repeat(" ", 20<<10), 400, "request_invalid"},
 		{"POST", "/api/uploads", "dev:u:u@x", `{"sha256":"abc","size":10}`, 400, "request_invalid"},
 		{"POST", "/api/uploads", "dev:u:u@x", `{"sha256":"` + strings.Repeat("a", 64) + `","size":1.5}`, 400, "request_invalid"},

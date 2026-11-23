@@ -187,12 +187,24 @@ func (e *env) do(method, path, user, body string, headers ...string) response {
 	return response{resp.StatusCode, resp.Header.Get("Retry-After"), out, raw}
 }
 
-// request is the example run request with capex set to tell runs apart.
-func request(capex int, extra ...string) string {
-	return fmt.Sprintf(`{"battery":{"max_charge_rate_mw":2,"max_discharge_rate_mw":2,"max_storage_volume_mwh":4,
-"charging_loss_fraction":0.05,"discharging_loss_fraction":0.05,"lifetime_years":10,"lifetime_cycles":5000,
-"degradation_pct_per_cycle":0.001,"capex_gbp":%d,"fixed_opex_gbp_per_year":5000},
-"start":"2018-01-01","end":"2018-01-03"%s}`, capex, strings.Join(extra, ""))
+// request is the example run request with the volume set to tell runs apart.
+func request(n int, extra ...string) string {
+	return fmt.Sprintf(`{"battery":{"power_mw":30,"volume_mwh":%d,"max_charge_mw":24,"max_discharge_mw":32.5,
+"charge_efficiency":0.92,"discharge_efficiency":0.92,"degradation_pct_per_cycle":0.001},
+"start":"2025-02-01","end":"2026-01-31"%s}`, n%59000+1, strings.Join(extra, ""))
+}
+
+// pldYear is a valid hourly PLD file for the whole of 2025.
+func pldYear() []byte {
+	var b strings.Builder
+	b.WriteString("hora,submercado,pld\n")
+	at := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	for h := range 365 * 24 {
+		for _, submarket := range []string{"SE", "S", "NE", "N"} {
+			fmt.Fprintf(&b, "%s,%s,%d.50\n", at.Add(time.Duration(h)*time.Hour).Format("2006-01-02T15:04"), submarket, 100+h%24)
+		}
+	}
+	return []byte(b.String())
 }
 
 func (e *env) usage(user string) quota.Usage {
@@ -415,7 +427,7 @@ func TestGetRun(t *testing.T) {
 	}
 
 	// Succeed it as the solver does: result as a JSON string, plan in S3.
-	result, err := os.ReadFile("../../../../contracts/examples/result.example.json")
+	result, err := os.ReadFile("../../../../contracts/examples/v2/result.example.json")
 	if err != nil {
 		t.Skip("not inside the repository")
 	}
@@ -438,7 +450,7 @@ func TestGetRun(t *testing.T) {
 	if !strings.Contains(url, "plans/"+runID+".csv") || !strings.Contains(url, "X-Amz-Expires=3600") {
 		t.Fatalf("plan_csv_url %q", url)
 	}
-	if res, _ := got.body["result"].(map[string]any); res["version"] != 1.0 {
+	if res, _ := got.body["result"].(map[string]any); res["version"] != 2.0 || res["model_version"] != contracts.ModelVersion {
 		t.Fatalf("result not parsed back: %.200s", got.raw)
 	}
 	// The response, plan_csv_url included, is a valid run-record.
@@ -454,10 +466,7 @@ func TestGetRun(t *testing.T) {
 
 func TestUploadedPrices(t *testing.T) {
 	e := newEnv(t, quota.Limits{User: 10, Global: 60}, 1000)
-	template, err := os.ReadFile("../../../../contracts/examples/prices-template.csv")
-	if err != nil {
-		t.Skip("not inside the repository")
-	}
+	template := pldYear()
 	put := func(data []byte) string {
 		sum := sha256.Sum256(data)
 		key := "uploads/" + hex.EncodeToString(sum[:]) + ".csv"
@@ -466,12 +475,12 @@ func TestUploadedPrices(t *testing.T) {
 	}
 	key := put(template)
 	upload := func(key, start, end string) response {
-		body := strings.Replace(request(4, `,"prices_key":"`+key+`"`), `"start":"2018-01-01","end":"2018-01-03"`,
+		body := strings.Replace(request(4, `,"prices_key":"`+key+`"`), `"start":"2025-02-01","end":"2026-01-31"`,
 			`"start":"`+start+`","end":"`+end+`"`, 1)
 		return e.do("POST", "/api/runs", "gina", body)
 	}
 
-	if r := upload(key, "2018-01-08", "2018-01-14"); r.status != 202 {
+	if r := upload(key, "2025-01-01", "2025-12-31"); r.status != 202 {
 		t.Fatalf("valid upload: %d %s", r.status, r.raw)
 	}
 	var job map[string]any
@@ -479,27 +488,30 @@ func TestUploadedPrices(t *testing.T) {
 	if p := job["prices"].(map[string]any); p["source"] != "s3" || p["key"] != key || p["bucket"] != "data" {
 		t.Fatalf("job prices %v", p)
 	}
-	// The hash is the second vector of contracts/examples/params-hash.json
-	// but for capex: check it is computed on the file's content.
+	if job["version"] != 2.0 || job["model_version"] != contracts.ModelVersion {
+		t.Fatalf("job version %v, model %v", job["version"], job["model_version"])
+	}
+	// The hash is computed on the file's content, as in the second vector of
+	// contracts/examples/v2/params-hash.json.
 	sum := sha256.Sum256(template)
 	if want, _ := contracts.ParamsHash(job["request"].(map[string]any), hex.EncodeToString(sum[:])); job["params_hash"] != want {
 		t.Fatalf("params_hash %v, want %s", job["params_hash"], want)
 	}
 
-	bad := put([]byte("timestamp,market_1,market_2\n2018-01-01T00:00:00,1,2\n2018-01-01T00:30:00,1,3\n"))
+	bad := put([]byte("hora,submercado,pld\n2025-01-01T00:30,SE,100.00\n"))
 	cases := []struct{ key, want string }{
-		{bad, "market_2 is an hourly price"},
+		{bad, "hora must fall on the hour"},
 		{"uploads/" + strings.Repeat("0", 64) + ".csv", "not found"},
 		{"uploads/" + strings.Repeat("1", 64) + ".csv", "does not match"},
 	}
 	e.objects["uploads/"+strings.Repeat("1", 64)+".csv"] = template
 	for _, c := range cases {
-		r := upload(c.key, "2018-01-01", "2018-01-01")
+		r := upload(c.key, "2025-01-01", "2025-12-31")
 		if r.status != 400 || code(r.body) != "prices_invalid" || !strings.Contains(r.body["error"].(map[string]any)["message"].(string), c.want) {
 			t.Errorf("%s: %d %s", c.want, r.status, r.raw)
 		}
 	}
-	if r := upload("somewhere/else.csv", "2018-01-01", "2018-01-01"); r.status != 400 || code(r.body) != "request_invalid" {
+	if r := upload("somewhere/else.csv", "2025-01-01", "2025-12-31"); r.status != 400 || code(r.body) != "request_invalid" {
 		t.Errorf("foreign key: %d %s", r.status, r.raw)
 	}
 	if u := e.usage("gina"); u.User != 1 {

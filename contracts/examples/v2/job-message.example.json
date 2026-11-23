@@ -1,0 +1,23 @@
+{
+ "version": 2,
+ "model_version": "pld-hourly-1",
+ "run_id": "01JD3X7Q8RZK5V2N4M6P9T0WYA",
+ "params_hash": "b4179fe898f1955655a0413b1e4e21624d000af3d8b01b8a6af044001388a6fd",
+ "user_sub": "3f1c9a2e-7b4d-4e8a-9c61-2d5f0b8e7a43",
+ "request": {
+  "battery": {
+   "power_mw": 30,
+   "volume_mwh": 130.1582746911937,
+   "max_charge_mw": 23.52941176470588,
+   "max_discharge_mw": 32.539568672798424,
+   "charge_efficiency": 0.9219544457292888,
+   "discharge_efficiency": 0.9219544457292888,
+   "degradation_pct_per_cycle": 0.001
+  },
+  "start": "2025-02-01",
+  "end": "2026-01-31"
+ },
+ "prices": {
+  "source": "bundled"
+ }
+}

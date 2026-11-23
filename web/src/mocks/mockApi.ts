@@ -7,16 +7,18 @@
 // a fourth run in a day gets quota_exceeded; and
 //   sessionStorage.setItem("mock:force", "global_cap" | "rate_limited" | "unavailable" | "request_invalid")
 // makes the next POST /api/runs answer with that error.
-import recordExample from "../../../contracts/examples/run-record.example.json";
-import resultExample from "../../../contracts/examples/result.example.json";
-import type { Progress, Result, RunRecord, RunRequest } from "../contracts/types";
+import recordExample from "../../../contracts/examples/v2/run-record.example.json";
+import resultExample from "../../../contracts/examples/v2/result.example.json";
+import type { Progress, Result, RunRecord, RunRequest, Submarket } from "../contracts/types";
 
 const STORE = "mock:runs";
 const QUOTA = "mock:quota";
 const LIMIT = 3;
 const QUEUED_MS = 2500;
-const PASS_MS = 5000;
+const CASE_MS = 900;
+const CASES_TOTAL = 8;
 const MOCK_S3 = "/__mock_s3__/upload";
+const ORDER: Submarket[] = ["SE", "S", "NE", "N"];
 
 interface MockRun {
   id: string;
@@ -96,22 +98,18 @@ function spend(owner: string, delta: number): void {
 }
 
 function planCsv(result: Result): string {
-  const w = result.series.week;
-  const rows = ["timestamp,price_1,price_2,charge_1_mw,charge_2_mw,discharge_1_mw,discharge_2_mw,storage_mwh"];
-  w.timestamp.forEach((t, i) =>
-    rows.push([t, w.price_1[i], w.price_2[i], w.charge_1_mw[i], w.charge_2_mw[i], w.discharge_1_mw[i], w.discharge_2_mw[i], w.storage_mwh[i]].join(",")),
-  );
+  const w = result.detail.week;
+  const rows = ["hora,pld,charge_mw,discharge_mw,storage_mwh"];
+  w.hora.forEach((t, i) => rows.push([t, w.price[i], w.charge_mw[i], w.discharge_mw[i], w.storage_mwh[i]].join(",")));
   return `data:text/csv;charset=utf-8,${encodeURIComponent(rows.join("\n"))}`;
 }
 
 /** The record the API would return for a mock run at this moment. */
 function snapshot(run: MockRun, now = Date.now()): RunRecord {
-  const binding = run.request.cycle_budget !== undefined;
-  const passes = binding ? 4 : 1;
   const started = run.created + QUEUED_MS;
-  const finished = started + passes * PASS_MS + 1000;
+  const finished = started + CASES_TOTAL * CASE_MS + 500;
   const base: RunRecord = {
-    version: 1,
+    version: 2,
     run_id: run.id,
     user_sub: run.sub,
     params_hash: recordExample.params_hash,
@@ -132,8 +130,7 @@ function snapshot(run: MockRun, now = Date.now()): RunRecord {
       finished_at: stamp(started + 1500),
       error: {
         code: "prices_invalid",
-        message:
-          "Line 214: market_2 changes within the hour starting 2018-01-05T10:00:00 (51.89, then 52.10). Market 2 is an hourly price: give both half hours of an hour the same value.",
+        message: "line 214: pld must be greater than zero.",
       },
     };
   }
@@ -143,26 +140,20 @@ function snapshot(run: MockRun, now = Date.now()): RunRecord {
       status: "succeeded",
       started_at: stamp(started),
       finished_at: stamp(finished),
-      progress: { ...(recordExample.progress as Progress), passes_estimated: passes, pass_index: passes, elapsed, updated_at: stamp(finished) },
+      progress: { phase: "done", cases_done: CASES_TOTAL, cases_total: CASES_TOTAL, submarket: null, case: null, fraction: 1, elapsed, done: true, updated_at: stamp(finished) },
       result: resultExample as unknown as Result,
       plan_csv_key: `plans/${run.id}.csv`,
       plan_csv_url: planCsv(resultExample as unknown as Result),
     };
   }
-  const t = (now - started) / PASS_MS;
-  const pass = Math.min(passes, Math.floor(t) + 1);
-  const passFraction = Math.min(1, t - (pass - 1));
-  // As the solver does: until two passes give a rate, allow for one more pass.
-  const estimated = pass >= 3 ? passes : null;
-  const fraction = Math.min(0.99, (pass - 1 + passFraction) / (estimated ?? pass + 1));
+  const done = Math.min(CASES_TOTAL - 1, Math.floor((now - started) / CASE_MS));
   const progress: Progress = {
-    phase: "calibrate",
-    pass_index: pass,
-    passes_estimated: estimated,
-    passes_max: 20,
-    pass_fraction: passFraction,
-    fraction,
-    cycle_value: binding ? [0, 18.4, 9.7, 11.2][pass - 1] ?? 11.2 : 0,
+    phase: "solving",
+    cases_done: done,
+    cases_total: CASES_TOTAL,
+    submarket: ORDER[Math.floor(done / 2)],
+    case: done % 2 === 0 ? "merchant" : "contracted",
+    fraction: done / CASES_TOTAL,
     elapsed,
     done: false,
     updated_at: stamp(now),
@@ -199,7 +190,7 @@ async function handle(url: URL, init: RequestInit | undefined, request: Request 
       if (forced === "global_cap") return error(429, "global_cap", "The site has used all 60 runs for today.", {}, { "Retry-After": String(secondsToMidnight()) });
       if (forced === "rate_limited") return error(429, "rate_limited", "Too many requests from your address.", {}, { "Retry-After": "42" });
       if (forced === "unavailable") return error(503, "unavailable", "The run could not be queued.");
-      if (forced === "request_invalid") return error(400, "request_invalid", "end - start must be at most 365 days.");
+      if (forced === "request_invalid") return error(400, "request_invalid", "end - start must be at most 730 days.");
     }
     const key = JSON.stringify(body);
     const runs = load<MockRun[]>(STORE, []);
@@ -220,7 +211,7 @@ async function handle(url: URL, init: RequestInit | undefined, request: Request 
   if (match && method === "GET") {
     const id = decodeURIComponent(match[1]);
     if (id === recordExample.run_id) {
-      return json(200, { ...recordExample, plan_csv_url: planCsv(resultExample as unknown as Result) });
+      return json(200, recordExample);
     }
     const run = load<MockRun[]>(STORE, []).find((r) => r.id === id);
     if (!run) return error(404, "not_found", "No run has this id.");

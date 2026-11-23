@@ -1,12 +1,23 @@
 # BatteryPlan
 
-A battery that trades two GB power markets, planned half hour by half hour.
-BatteryPlan solves the dispatch as a mixed-integer linear program (pulp + HiGHS)
-over rolling windows, prices the battery's cycle budget with Lagrangian cutting
-planes, and serves it as a small serverless web app: change the battery, upload
-up to a year of prices, and watch the solve run.
+Is this battery worth buying, in which Brazilian submarket, and under which
+business model? BatteryPlan values a battery against the hourly PLD of Brazil's
+four submarkets, as a capacity contract and as a merchant asset, and serves it as
+a small serverless web app: size the battery, change the financial assumptions
+and see NPV, IRR and payback move instantly.
 
 **Site:** <https://batteryplan.gmachado.dev> · **Method:** [`docs/model/model.md`](docs/model/model.md)
+
+- One battery in one submarket (SE, S, NE or N), valued as two separate cases:
+  **contracted** (LRCAP fixed revenue, with the PLD dispatch only a proxy for the
+  ONS) and **merchant** (PLD arbitrage, no fixed revenue).
+- Eight solutions per run (4 submarkets × 2 cases), each one program over the whole
+  horizon. The location ranking comes from the merchant case.
+- An instant financial layer in the browser, in BRL: NPV, IRR, payback, maximum
+  viable capex and minimum viable bid, with IPCA, a nominal discount rate and real
+  PLD growth.
+- Market facts and sources: [`docs/mercado-brasileiro.md`](docs/mercado-brasileiro.md).
+  Official auction documents: [`docs/leilao-lrcap-2026/`](docs/leilao-lrcap-2026/README.md).
 
 ## Architecture
 
@@ -15,7 +26,7 @@ flowchart LR
     U(["browser"])
     COG["<b>Cognito</b><br/>Google"]
     CF["<b>CloudFront</b>"]
-    SITE[("<b>S3</b> site<br/>SPA")]
+    SITE[("<b>S3</b> site<br/>SPA + PLD scenario")]
     API["<b>API</b> · Go Lambda<br/>Function URL, OAC"]
     DDB[("<b>DynamoDB</b><br/>one table")]
     Q["<b>SQS</b> jobs"]
@@ -62,19 +73,17 @@ deployed by GitHub Actions through OIDC, with no long-lived AWS keys.
   it is a static arm64 binary with cold starts in milliseconds and 256 MB of
   memory. The model stays in Python, where pulp and HiGHS are, and runs as a
   container image at 1769 MB, the size at which Lambda grants one full vCPU.
-- **Runs are capped at one year.** A Lambda lives at most 15 minutes (the solver
-  is given 10), and a binding cycle budget takes about ten passes of the rolling
-  horizon to price, so longer horizons are solved offline and served as a static
-  file.
-- **Every run is solved against the Lambda's time limit.** Before each round of
-  the cycle-value search the solver checks that one more pass and the recovery
-  pass still fit in the time left; if they don't, it stops early and still
-  delivers a plan within the cycle budget. The result page says so, and shows how
-  close that plan is to the best possible from the dual bound.
-- **The window is fixed for web runs.** Each day is planned with the next day in
-  view (commit 1 day, lookahead 1 day). Longer windows
-  ([`docs/solve.md`](docs/solve.md), §6 of the method) cost time against that
-  limit, so the form doesn't offer them; the CLI still does.
+- **Runs span one to two years.** The balanced year needs all twelve months, and
+  two years keeps the worst case inside the solver's 10 minutes on one Lambda vCPU.
+  The eight programs over all 670 days take about 17 s on a development machine,
+  and the slowest forced contract case about a minute
+  ([`docs/solve.md`](docs/solve.md)).
+- **Every run is solved against the Lambda's time limit.** The portfolio gets the
+  invocation's remaining time. A solve that runs out fails the run and refunds the
+  quota rather than returning a partial plan.
+- **Finance never reaches the solver.** The request is physical only, so a change
+  of capex, IPCA or discount rate recalculates in the browser, with no run, no
+  quota and no sign-in.
 - **Rate limiting in layers**, each cheaper than the one behind it:
   the Function URL accepts only requests CloudFront signed (OAC); 60 requests a
   minute per IP; sign-in required to submit; 3 runs a day per user; 60 runs a day
@@ -89,74 +98,66 @@ deployed by GitHub Actions through OIDC, with no long-lived AWS keys.
   the Python solver, and read by the TypeScript form for its bounds and defaults.
 - **Runs without an AWS account.** `docker compose up` brings up LocalStack (SQS,
   DynamoDB, S3), the API as a plain HTTP server, and the DLQ handler and the
-  solver as queue pollers that call the same handlers the Lambdas do. The demo
-  above was recorded on it.
+  solver as queue pollers that call the same handlers the Lambdas do.
 
 ## The model in brief
 
-The battery (2 MW in, 2 MW out, 4 MWh) buys and sells in two markets. Market 1
-settles every half hour; Market 2 settles hourly, so anything committed to it is
-committed for the whole hour. Energy is lost on the way in and on the way out,
-and every MWh pushed through wears the asset out a little.
+A battery buys and sells at the hourly PLD of one submarket. Energy is lost on the
+way in and on the way out, and every cycle wears the asset a little.
 
 ```mermaid
 flowchart LR
-    M1["<b>Market 1</b><br/>half-hourly"]
-    M2["<b>Market 2</b><br/>hourly"]
-    B["<b>Battery</b><br/>2 MW in / 2 MW out<br/>4 MWh store"]
+    P["<b>Hourly PLD</b><br/>SE · S · NE · N<br/>16,080 hours each"]
+    B["<b>Battery</b><br/>P MW delivered<br/>E MWh store"]
+    M["<b>Merchant</b><br/>arbitrage revenue,<br/>a perfect-foresight ceiling"]
+    C["<b>Contracted</b><br/>fixed revenue; dispatch<br/>only a proxy for the ONS"]
+    F["<b>Investment layer</b><br/>NPV · IRR · payback<br/>max capex · min bid"]
 
-    M1 -- "buy (−5% on charge)" --> B
-    M2 -- "buy (−5% on charge)" --> B
-    B -- "sell (−5% on discharge)" --> M1
-    B -- "sell (−5% on discharge)" --> M2
-
-    B -.-> D["<b>Wear</b><br/>0.001% volume lost<br/>per equivalent full cycle<br/>5,000-cycle life"]
+    P --> B
+    B --> M --> F
+    B --> C --> F
 ```
 
 Three consequences shape the rest:
 
-- **A round trip keeps only 90.25%** of what it buys (0.95 × 0.95), so a spread
-  has to beat about 11% before a trade is worth making.
-- **Charging and discharging must be mutually exclusive.** The two markets
-  diverge, so without a binary forbidding it the battery would buy in one and
-  sell into the other in the same instant, wheeling energy it never stores.
-- **Market 2's decisions are held flat across each hour**, imposed on the
-  decision variables rather than on the prices, because that is what committing
-  capacity to an hourly product means.
+- **No binary keeps charge and discharge apart.** With positive prices and a real
+  loss, no optimal plan does both in one hour (§5.1), so the merchant case is a
+  plain LP: about 2 s for 670 days.
+- **The contract adds limits, and one binary.** Daily and rolling yearly cycles are
+  linear. The 12 h daily injection limit needs a binary, and it is added only on
+  the days whose relaxed plan breaks it. On the real data none does.
+- **The two cases cannot be added.** The contract centralises the dispatch in the
+  ONS and sends the PLD settlement to the CONCAP, so a contracted battery earns no
+  arbitrage.
 
-The decision variables are half-hourly charge and discharge in each market; the
-constraints are storage bounds, the energy balance with losses, mode exclusivity
-and rate limits, the hourly commitment of Market 2, cycle accounting with a life
-cap, and storage degradation (§4.1–§4.7 of [`model.md`](docs/model/model.md));
-the objective is arbitrage profit net of cycle wear. One program over all the
-periods, each carrying a binary, is not tractable, so **the horizon is
-decomposed** into windows, by default a day committed with a day of foresight:
-1,096 window MILPs over three years.
+For a battery delivering 1 MW for 4 h at the default parameters, over the 670 days
+of CCEE data ([`docs/solve.md`](docs/solve.md)):
 
-Decomposition gets one thing wrong on its own: a cycle budget over the whole
-horizon, which no single window can see. The model relaxes it with a Lagrange
-multiplier, a price λ on each cycle, and finds λ with Kelley's cutting planes,
-which also return a dual bound on how far the plan can be from the optimum
-([`docs/cycle-budget.md`](docs/cycle-budget.md)). A bisection on λ is kept as the
-reference method ([`docs/bisection.md`](docs/bisection.md)).
+| Submarket | Merchant, balanced year (BRL/MW-year) | Last 12 months | Capture factor (24+0) |
+| --- | --: | --: | --: |
+| SE | 234,912 | 291,133 | 0.980 |
+| NE | 217,250 | 266,720 | 0.965 |
+| N | 205,121 | 264,575 | 0.965 |
+| S | 193,692 | 219,932 | 0.972 |
 
-The model lives in `src/battery_plan/`, the formulation it implements is written
-out section by section in [`docs/model/model.md`](docs/model/model.md). On the site, the
-[methodology page](https://batteryplan.gmachado.dev/methodology) renders §1–§6 of
-the same file.
+These are perfect-foresight ceilings before the capture factor. The capture factor
+is itself an upper bound, since the backtest sees each day's prices in full.
+
+The model lives in `src/battery_plan/`, and the formulation it implements is written
+out section by section in [`docs/model/model.md`](docs/model/model.md). On the site,
+the [methodology page](https://batteryplan.gmachado.dev/methodology) renders §1–§6
+and §8 of the same file.
 
 ## Repository layout
 
 ```
-src/battery_plan/     the model: formulation, rolling horizon, cycle-value search,
-                      run_dispatch (what the CLI and the web solver both call),
-                      the result payload, the params hash
+src/battery_plan/     the model: the hourly PLD, one program per submarket and
+                      case, the portfolio, the result payload, the params hash
 services/api/         Go: the HTTP API (Lambda Function URL / plain server) and
                       the DLQ handler
-services/solver/      Python: the SQS-driven solver Lambda and its local poller,
-                      the script that precomputes a static scenario
-web/                  React 19 + Vite + TypeScript: dashboard, run form,
-                      progress, methodology
+services/solver/      Python: the SQS-driven solver Lambda and its local poller
+web/                  React 19 + Vite + TypeScript: dashboard, investment layer,
+                      run form, progress, methodology
 contracts/            JSON Schemas shared by Go, Python and TypeScript, their
                       examples, platform.md (storage, routes, refunds)
 infra/aws/            Terraform: CloudFront, S3, Lambdas, SQS, DynamoDB, Cognito,
@@ -167,10 +168,10 @@ infra/local/          LocalStack init script
 docker-compose.yml    the whole back end against LocalStack
 .github/workflows/    CI (Python, Go, web, Terraform) and deploy
 tests/                the Python suite, described in docs/validation.md
-docs/                 the model, architecture,
-                      deploy; see "Where to read what" below
-notebooks/, scripts/  the price notebook and the measurement scripts
-data/raw/             local input spreadsheets, not committed
+docs/                 the model, the market and its official documents,
+                      architecture, deploy; see "Where to read what" below
+scripts/              builders of the derived files and the measurement run
+data/raw/             the CCEE exports and the canonical hourly PLD
 ```
 
 The Python package file by file is in [`docs/architecture.md`](docs/architecture.md).
@@ -197,13 +198,12 @@ API inside the tab ([`web/README.md`](web/README.md)).
 The model also runs on its own, from the command line:
 
 ```bash
-uv run battery-plan inputs                                        # spec + data quality
-uv run battery-plan dispatch --start 2018-01-01 --end 2018-01-31  # a month
-uv run battery-plan dispatch                                      # all three years, a few minutes
+uv run battery-plan inputs                                        # coverage and level of the PLD
+uv run battery-plan dispatch --start 2025-02-01 --end 2026-01-31  # a year
+uv run battery-plan dispatch                                      # all 670 days
 ```
 
-Every flag, the search comparisons, `make results` (re-running every figure in the
-documents) and the Docker image are in [`docs/cli.md`](docs/cli.md).
+Every flag and the Docker image are in [`docs/cli.md`](docs/cli.md).
 
 ## Deploy
 
@@ -229,37 +229,34 @@ down, what checking found that thinking had not, and what is still open.
 
 ```mermaid
 flowchart TD
-    R["<b>README</b><br/>the problem, the answer, how to run it"]
-    M["<b>docs/model/model.md</b><br/>the formulation · the maths, §1–§6"]
-    A["<b>docs/architecture.md</b><br/>the packages, every file, the decision inside it"]
-    S["<b>docs/solve.md</b><br/>what happens in a solve · the rolling horizon"]
-    C["<b>docs/cycle-budget.md</b><br/>the one constraint decomposition can get wrong<br/>the λ that fixes it, and the cutting planes<br/>that find it"]
-    B["<b>docs/bisection.md</b><br/>the comparison method for that λ"]
-    ST["<b>docs/model/model-stochastic.md</b><br/>the same model with stochastic prices<br/>formulation only"]
-    V["<b>docs/validation.md</b><br/>what is checked, what was found, what is open"]
-    G["<b>docs/glossary.md</b><br/>every term, the one word chosen for it,<br/>and the words deliberately not used"]
+    R["<b>README</b><br/>the question, the answer, how to run it"]
+    M["<b>docs/model/model.md</b><br/>the formulation · the maths, §1–§8"]
+    MB["<b>docs/mercado-brasileiro.md</b><br/>the market, its rules and sources"]
+    D["<b>docs/data.md</b><br/>the CCEE files and the canonical PLD"]
+    A["<b>docs/architecture.md</b><br/>the package and the decisions inside it"]
+    S["<b>docs/solve.md</b><br/>what a solve does, and what it costs"]
+    V["<b>docs/validation.md</b><br/>what is checked, what is open"]
+    G["<b>docs/glossary.md</b><br/>every term, the one word chosen for it"]
     P["<b>contracts/platform.md</b><br/>the web platform: storage, routes,<br/>quotas, refunds, the local stack"]
     DE["<b>docs/deploy.md</b><br/>AWS from zero, and what it costs"]
 
     R --> G
-    R --> M
-    R --> A --> S --> C --> V
-    C --> B
-    M --> ST
+    R --> M --> MB
+    R --> D --> A --> S --> V
     R --> P --> DE
 ```
 
 | Document | Read it for |
 | --- | --- |
-| [`docs/model/model.md`](docs/model/model.md) | The formulation: objective, constraints, assumptions, numbered §1–§6. Every module cites it. |
-| [`docs/model/model-stochastic.md`](docs/model/model-stochastic.md) | The multistage stochastic extension: scenario tree, non-anticipativity, the cycle cap under uncertainty, mean-CVaR. Formulation only, nothing implemented. |
-| [`docs/architecture.md`](docs/architecture.md) | How the Python package is structured, every class with the reason it exists, why the constraints are separate blocks, and how two search algorithms share one seam. |
-| [`docs/solve.md`](docs/solve.md) | Why the horizon is decomposed, what one window does, and the evidence that a day of foresight suffices. |
-| [`docs/cycle-budget.md`](docs/cycle-budget.md) | The global cycle cap, the misallocation decomposition causes, valuing cycles instead of splitting them, and how λ is found by the default method: Kelley's cutting planes. |
-| [`docs/bisection.md`](docs/bisection.md) | The second method for the same λ, kept for comparison: what a bisection on cycle use searches for, what it costs, and what it cannot certify. |
-| [`docs/glossary.md`](docs/glossary.md) | Every term the model, the code and the write-up use, the one word chosen for each idea, and the renames that choice implied. |
-| [`docs/validation.md`](docs/validation.md) | The model's tests, what checking found that thinking had not, and the questions still open. |
-| [`docs/cli.md`](docs/cli.md) | The command line: every flag, the search comparisons, reproducing every figure, the Docker image. |
+| [`docs/model/model.md`](docs/model/model.md) | The formulation: objective, contract limits, assumptions and the investment layer, numbered §1–§8. |
+| [`docs/mercado-brasileiro.md`](docs/mercado-brasileiro.md) | The PLD, the CCEE files, the LRCAP rules with their clauses, costs and sources (in Portuguese). |
+| [`docs/leilao-lrcap-2026/README.md`](docs/leilao-lrcap-2026/README.md) | Index of the official auction documents: title, date, source URL, `IdMidia`, SHA-256. |
+| [`docs/data.md`](docs/data.md) | The CCEE exports, how the canonical file is built, and what an upload must satisfy. |
+| [`docs/architecture.md`](docs/architecture.md) | How the Python package is structured, and the decisions inside it. |
+| [`docs/solve.md`](docs/solve.md) | One program per submarket and case: solve times, the 12 h limit under stress, and the capture factor. |
+| [`docs/glossary.md`](docs/glossary.md) | Every term the model, the code and the write-up use, with the one word chosen for each idea. |
+| [`docs/validation.md`](docs/validation.md) | The model's tests, and the questions still open. |
+| [`docs/cli.md`](docs/cli.md) | The command line: every flag, the derived files, the Docker image. |
 | [`contracts/README.md`](contracts/README.md) | The four JSON Schemas, their fields and units, the cross-field rules, the uploaded price format, the params hash. |
 | [`contracts/platform.md`](contracts/platform.md) | What the services share beyond the schemas: the DynamoDB items, the HTTP routes and error codes, submitting, finishing and refunding a run, the local stack, AWS sizing. |
 | [`services/api/README.md`](services/api/README.md), [`services/solver/README.md`](services/solver/README.md), [`web/README.md`](web/README.md) | Each service: its packages or files, its configuration, how to run and test it on its own. |

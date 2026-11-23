@@ -2,100 +2,60 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
 from battery_plan.cli import main
-from battery_plan.data_io.paths import BATTERY_SPEC_XLSX, MARKET_PRICES_XLSX
+from battery_plan.result_v2 import PLAN_COLUMNS
 
-requires_spreadsheets = pytest.mark.skipif(
-    not (BATTERY_SPEC_XLSX.exists() and MARKET_PRICES_XLSX.exists()),
-    reason="raw spreadsheets are not present",
-)
+#: The shortest span a balanced year accepts: every calendar month is in it.
+YEAR = ["--start", "2025-02-01", "--end", "2026-01-31"]
 
 
-@requires_spreadsheets
 def test_inputs_command_runs(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["inputs"]) == 0
 
     out = capsys.readouterr().out
-    assert "Battery spec" in out
-    assert "Market 1 (half-hourly)" in out
+    assert "Hourly PLD: 2025-01-20 to 2026-11-20" in out
+    assert "16,080 hours in each of 4 submarkets" in out
 
 
-@requires_spreadsheets
-def test_dispatch_command_solves_a_short_horizon_and_writes_a_schedule(
+def test_dispatch_solves_the_portfolio_and_writes_the_plans(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     out = tmp_path / "plan.csv"
-    assert (
-        main(["dispatch", "--start", "2018-01-01", "--end", "2018-01-02", "--out", str(out)]) == 0
-    )
+    assert main(["dispatch", *YEAR, "--power-mw", "1", "--out", str(out)]) == 0
 
-    printed = capsys.readouterr().out
-    # The result goes to stdout in two named blocks: what the battery does,
-    # and how far that could be from the best possible.
-    assert "Plan" in printed
-    assert "profit" in printed
-    assert "Certificate" in printed
-    assert "cycle value" in printed
+    captured = capsys.readouterr()
+    assert "Merchant ranking" in captured.out
+    assert "Contracted case" in captured.out
+    assert "[8/8]" in captured.err
 
-    plan = pd.read_csv(out, index_col=0, parse_dates=True)
-    # Two whole days of half-hourly periods, and the dates asked for.
-    assert len(plan) == 96
-    assert plan.index[0] == pd.Timestamp("2018-01-01 00:00")
-    assert plan.index[-1] == pd.Timestamp("2018-01-02 23:30")
-    assert plan["net_revenue_gbp"].sum() > 0
+    plan = pd.read_csv(out)
+    assert tuple(plan.columns) == tuple(PLAN_COLUMNS)
+    assert len(plan) == 365 * 24 * 8
+    assert plan["hora"].iloc[0] == "2025-02-01T00:00"
+    assert plan["hora"].iloc[-1] == "2026-01-31T23:00"
 
 
-@requires_spreadsheets
 def test_quiet_keeps_the_result_on_stdout_and_says_nothing_on_stderr(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """``> summary.txt`` must still capture the answer, whatever the progress mode."""
+    """``> summary.txt`` must still capture the answer."""
     out = tmp_path / "plan.csv"
-    argv = [
-        "dispatch",
-        "--start",
-        "2018-01-01",
-        "--end",
-        "2018-01-01",
-        "--out",
-        str(out),
-        "--quiet",
-    ]
-    assert main(argv) == 0
+    assert main(["dispatch", *YEAR, "--power-mw", "1", "--out", str(out), "--quiet"]) == 0
 
     captured = capsys.readouterr()
-    assert "Plan" in captured.out
+    assert "Merchant ranking" in captured.out
     assert captured.err == ""
 
 
-@requires_spreadsheets
-def test_json_progress_writes_parsable_events_to_stderr(
+def test_dates_outside_the_data_are_an_error_not_a_crash(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """A sweep should be able to replay a run's convergence without re-running it."""
-    out = tmp_path / "plan.csv"
-    argv = [
-        "dispatch",
-        "--start",
-        "2018-01-01",
-        "--end",
-        "2018-01-01",
-        "--out",
-        str(out),
-        "--progress",
-        "json",
-    ]
-    assert main(argv) == 0
-
-    events = [json.loads(line) for line in capsys.readouterr().err.splitlines() if line.strip()]
-    kinds = {event["event"] for event in events}
-    assert {"run_started", "pass_started", "pass_finished", "run_finished"} <= kinds
-
-    finished = [event for event in events if event["event"] == "pass_finished"]
-    assert finished and all("cycles" in event and "mode" in event for event in finished)
+    dates = ["--start", "2024-01-01", "--end", "2024-12-31"]
+    argv = ["dispatch", *dates, "--out", str(tmp_path / "p")]
+    assert main(argv) == 2
+    assert "No PLD" in capsys.readouterr().err

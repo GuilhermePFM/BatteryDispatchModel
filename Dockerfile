@@ -1,6 +1,6 @@
 # The model, pinned end to end: Python 3.12 as in .python-version, every
-# dependency resolved from uv.lock, and the two input spreadsheets baked in, so
-# `docker run` reproduces a run on any machine with no local toolchain.
+# dependency resolved from uv.lock, and the bundled PLD baked in, so `docker
+# run` reproduces a run on any machine with no local toolchain.
 FROM python:3.12-slim
 
 # uv itself is pinned; it is the only tool the image needs beyond Python.
@@ -23,11 +23,18 @@ ARG GROUPS=--no-dev
 COPY pyproject.toml uv.lock README.md ./
 RUN uv sync --frozen --no-install-project $GROUPS
 
-# Then the project.
+# Then the project. src/battery_plan/data_io/paths.py resolves the inputs
+# relative to the package, so the tree has to keep its shape: data/raw next to
+# src/, which is why the prices are copied rather than mounted.
 COPY src/ src/
+COPY data/raw/ data/raw/
 COPY scripts/ scripts/
 COPY tests/ tests/
 COPY docs/ docs/
+# What the suite checks against: the schemas, the solver handler, the vectors.
+COPY contracts/ contracts/
+COPY services/solver/ services/solver/
+COPY web/src/finance/golden-vectors.json web/src/finance/ipca-index.json web/src/finance/
 COPY Makefile ./
 RUN uv sync --frozen $GROUPS
 

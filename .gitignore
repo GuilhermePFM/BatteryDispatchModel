@@ -222,16 +222,15 @@ __marimo__/
 # Project
 data/results/*
 !data/results/.gitkeep
-data/raw/.~lock.battery_spec.xlsx#
-data/raw/.~lock.market_prices.xlsx#
 
 # Private working notes, not part of the deliverable
 notes/
+plano/
 docs/model/study.md
 docs/proposta/
 
 # Claude Code worktrees
 .claude/worktrees/
 
-# Input data stays out of this public repository.
+# Spreadsheet inputs stay out of this public repository.
 data/raw/*.xlsx

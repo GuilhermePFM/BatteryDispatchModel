@@ -1,5 +1,5 @@
 // docs/model/model.md is the single source: it is imported raw at build time,
-// cut down to the deterministic model (§1 to §6, see methodology/extract.ts)
+// cut down to the model and investment layer (§1 to §6 and §8, see methodology/extract.ts)
 // and rendered with KaTeX here.
 import "katex/dist/katex.min.css";
 import { useEffect, useMemo, useState } from "react";
@@ -56,7 +56,7 @@ export default function Methodology() {
         <div className="page-head">
           <h1>Methodology</h1>
           <p>
-            The optimisation model behind every plan on this site: what is decided, what constrains it, and how the cycle budget is priced. This page is
+            The optimisation model behind every plan on this site: what is decided, what constrains it, and how the investment is valued. This page is
             rendered from <a href={`${repoUrl}/docs/model/model.md`}>docs/model/model.md</a> in the repository.
           </p>
         </div>

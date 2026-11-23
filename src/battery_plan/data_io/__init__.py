@@ -1,38 +1,43 @@
-"""Input/output: where the inputs live, how they are read and described.
+"""Input/output: where the hourly PLD lives, how it is read and how an upload is checked."""
 
-The input spreadsheets, and the CSV a user uploads.
-"""
-
-from battery_plan.data_io.loaders import (
-    PRICE_CSV_COLUMNS,
-    PriceFileError,
-    load_battery_spec,
-    load_market_prices,
-    load_market_prices_csv,
-    write_market_prices_csv,
-)
 from battery_plan.data_io.paths import (
-    BATTERY_SPEC_XLSX,
+    CCEE_RAW_DIR,
     DATA_DIR,
-    MARKET_PRICES_XLSX,
+    PLD_HOURLY_CSV,
     PROJECT_ROOT,
     RAW_DATA_DIR,
     RESULTS_DIR,
 )
-from battery_plan.data_io.quality import price_quality_report
+from battery_plan.data_io.pld import (
+    PLD_CSV_HEADER,
+    PLD_ERRORS,
+    PLD_HOURLY_SHA256,
+    SUBMARKETS,
+    PldDataError,
+    PldFileError,
+    build_canonical_pld,
+    check_pld_csv,
+    load_pld,
+    parse_pld,
+    read_ccee_export,
+)
 
 __all__ = [
-    "BATTERY_SPEC_XLSX",
+    "CCEE_RAW_DIR",
     "DATA_DIR",
-    "MARKET_PRICES_XLSX",
-    "PRICE_CSV_COLUMNS",
+    "PLD_CSV_HEADER",
+    "PLD_ERRORS",
+    "PLD_HOURLY_CSV",
+    "PLD_HOURLY_SHA256",
     "PROJECT_ROOT",
     "RAW_DATA_DIR",
     "RESULTS_DIR",
-    "PriceFileError",
-    "load_battery_spec",
-    "load_market_prices",
-    "load_market_prices_csv",
-    "price_quality_report",
-    "write_market_prices_csv",
+    "SUBMARKETS",
+    "PldDataError",
+    "PldFileError",
+    "build_canonical_pld",
+    "check_pld_csv",
+    "load_pld",
+    "parse_pld",
+    "read_ccee_export",
 ]

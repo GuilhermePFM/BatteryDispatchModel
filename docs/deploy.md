@@ -12,6 +12,10 @@ table, one data bucket, Cognito with Google, and a US$ 5 budget alert.
 | `infra/aws/` | Everything else, applied by `.github/workflows/deploy.yml` on every push to `main` |
 | `.github/workflows/ci.yml` | Python, Go, web and Terraform checks on pull requests and pushes |
 
+The API and the solver speak contract v2: runs of 365 to 731 days, up to 2,000 MW
+and 60,000 MWh, the hourly PLD in the solver image, all the cases' plans in one
+S3 object, and each result at or below 300 KB. Deploys leave only from `main`.
+
 ## 1. Prerequisites
 
 - An AWS account, and an admin profile for the AWS CLI on your machine.
@@ -23,6 +27,8 @@ table, one data bucket, Cognito with Google, and a US$ 5 budget alert.
   Quotas → AWS Lambda → Concurrent executions*; ask for 1000 (free, usually
   granted within a day). The workflow deploys the API unreserved until you set
   the GitHub variable `API_RESERVED_CONCURRENCY=10`, which needs the higher quota.
+- `web/public/scenarios/pld-2025-2026.json` committed: the SPA build ships it,
+  and CI builds from the checkout.
 
 ## 2. Bootstrap (once, locally)
 

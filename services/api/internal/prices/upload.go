@@ -1,3 +1,9 @@
+// Package prices handles uploaded price files: the presigned POST the browser
+// uploads through, and a structural check of the file before a run is queued.
+//
+// The check mirrors battery_plan.data_io.check_pld_csv, with messages in the
+// same words, so a bad file is turned away at submission rather than as a
+// failed run. The solver still reads the file in full and remains the judge.
 package prices
 
 import (
@@ -14,6 +20,9 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 )
+
+// MaxBytes is the largest upload accepted, the presigned POST's content-length-range.
+const MaxBytes = 5 << 20
 
 var (
 	sha256Hex = regexp.MustCompile(`^[0-9a-f]{64}$`)

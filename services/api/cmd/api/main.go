@@ -83,6 +83,8 @@ func run() error {
 		Bucket:   cfg.DataBucket,
 		Limits:   quota.Limits{User: cfg.DailyUserLimit, Global: cfg.DailyGlobalLimit},
 		Rate:     quota.Rate{DB: db, Table: cfg.TableName, PerMinute: cfg.IPRatePerMinute},
+		// The solver image carries the CCEE prices.
+		BundledPrices: true,
 	}
 
 	if os.Getenv("AWS_LAMBDA_RUNTIME_API") != "" {

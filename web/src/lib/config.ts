@@ -14,7 +14,7 @@ export const cognito = {
 
 export const repoUrl = (import.meta.env.VITE_REPO_URL ?? "https://github.com/GuilhermePFM/BatteryCase/blob/main").replace(/\/$/, "");
 
-export const scenarioUrl = import.meta.env.VITE_SCENARIO_URL || "/scenarios/default.json";
+export const scenarioUrl = import.meta.env.VITE_SCENARIO_URL || "/scenarios/pld-2025-2026.json";
 
 export const contactEmail = "gui@gmachado.dev";
 

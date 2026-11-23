@@ -26,12 +26,12 @@ Go is pinned in the root `mise.toml`. From `services/api/`:
 go test ./...       # unit tests; the DynamoDB tests start amazon/dynamodb-local in docker,
                     # and skip without docker (or with -short)
 make zips           # dist/api.zip and dist/dlq.zip: bootstrap for provided.al2023, arm64
-go generate ./...   # after editing contracts/*.schema.json: refresh the embedded copies
+go generate ./...   # after editing contracts/v2/*.schema.json: refresh the embedded copies
 ```
 
 `TestSchemasMatchContracts` fails when the embedded schemas drift from
 `contracts/`, and `TestParamsHashVectors` reproduces both vectors of
-`contracts/examples/params-hash.json`.
+`contracts/examples/v2/params-hash.json`.
 
 Locally the API runs from the root `docker-compose.yml` (service `api`, image
 target `local`; the `dlq` service runs `/dlq` from the same image). With the
@@ -69,11 +69,10 @@ docker build -f services/api/Dockerfile --target zips -o services/api/dist .
   and `POST /api/runs` accepts only a `prices_key` of that shape, so the hash
   that goes into the params hash comes from the key and is checked against the
   object's bytes.
-- **The CSV check** follows `load_market_prices_csv` rule for rule, in the same
-  words, and adds one: a file may cover at most 367 days. Timestamps are read in
-  the usual ISO 8601 shapes (date, `T` or space, minutes or seconds, optional
-  fraction, optional `Z` or offset); pandas reads a few rarer ones the API turns
-  away. The solver reads the file again and has the last word.
+- **The CSV check** (`CheckPLD`) mirrors `battery_plan.data_io.check_pld_csv`
+  rule for rule, in the same words, and both are held to the shared verdicts in
+  `contracts/examples/pld-upload-verdicts.json`. The solver reads the file again
+  and has the last word.
 - **Contention.** Concurrent submissions touching the same counters cancel each
   other's transactions (`TransactionConflict`); the API retries those with
   backoff, so only a failed condition becomes a 429.

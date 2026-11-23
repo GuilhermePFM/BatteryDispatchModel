@@ -137,7 +137,7 @@ export interface HeatCells {
   maxAbs: number;
 }
 
-/** The net power grid as [day index, half-hour index, MW], nulls left out; maxAbs at least 0.1. */
+/** The net power grid as [day index, hour index, MW], nulls left out; maxAbs at least 0.1. */
 export function heatCells(values: Column[]): HeatCells {
   const cells: [number, number, number][] = [];
   let maxAbs = 0.1;
