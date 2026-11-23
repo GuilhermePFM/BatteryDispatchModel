@@ -91,7 +91,7 @@ export const BATTERY_FIELDS: FieldSpec[] = [
     max: batteryProps.max_charge_mw.maximum,
     integer: false,
     default: undefined,
-    description: "The contract needs the contracted 4 h back within 6 h.",
+    description: "Up to the power delivered. The contract needs the contracted 4 h back within 6 h.",
     step: "1",
     optional: true,
   },
@@ -103,7 +103,7 @@ export const BATTERY_FIELDS: FieldSpec[] = [
     max: batteryProps.max_discharge_mw.maximum,
     integer: false,
     default: undefined,
-    description: "The contract needs at least the power delivered.",
+    description: "Up to the power delivered. Below it, only the merchant case is solved.",
     step: "1",
     optional: true,
   },
@@ -274,12 +274,13 @@ export function validate(values: FormValues, file?: PriceFileInfo | null): FormE
     } else if (b.volume_mwh < batteryProps.volume_mwh.minimum) {
       errors["battery.duration_hours"] = `This makes ${formatBound(b.volume_mwh)} MWh; the least is ${formatBound(batteryProps.volume_mwh.minimum)}.`;
     }
-    if (b.max_charge_mw > batteryProps.max_charge_mw.maximum || b.max_charge_mw < batteryProps.max_charge_mw.minimum) {
-      errors["battery.charge_rate_mw"] = `This needs a charge rate of ${formatBound(b.max_charge_mw)} MW, outside ${formatBound(batteryProps.max_charge_mw.minimum)} to ${formatBound(batteryProps.max_charge_mw.maximum)}.`;
+    // Capex and opex scale with the power delivered, so a faster rate would come free.
+    const mostPower = b.power_mw * (1 + 1e-9);
+    if (b.max_charge_mw > mostPower) {
+      errors["battery.charge_rate_mw"] = `At most the power delivered, ${formatBound(b.power_mw)} MW.`;
     }
-    if (b.max_discharge_mw > batteryProps.max_discharge_mw.maximum) {
-      const key = values.battery.discharge_rate_mw.trim() === "" ? "battery.power_mw" : "battery.discharge_rate_mw";
-      errors[key] = `This needs a discharge rate above ${formatBound(batteryProps.max_discharge_mw.maximum)} MW.`;
+    if (b.max_discharge_mw * b.discharge_efficiency > mostPower) {
+      errors["battery.discharge_rate_mw"] = `At most the power delivered, ${formatBound(b.power_mw)} MW.`;
     }
   }
   const budget = numberError(values.cycle_budget, CYCLE_BUDGET_FIELD, true);

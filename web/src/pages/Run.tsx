@@ -262,7 +262,7 @@ export function Run() {
                   return (
                     <NumberField
                       key={field.key}
-                      field={field}
+                      field={auto === undefined ? field : { ...field, max: Math.min(field.max, auto) }}
                       name={field.key}
                       value={values.battery[field.key as keyof FormValues["battery"]]}
                       error={shown[`battery.${field.key}`]}

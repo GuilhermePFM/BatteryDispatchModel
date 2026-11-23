@@ -139,13 +139,20 @@ describe("buildRequest", () => {
   });
 
   it("takes explicit rates at the grid and rebuilds them", () => {
-    const values = { ...defaultValues(), battery: { ...defaultValues().battery, charge_rate_mw: "28", discharge_rate_mw: "35" } };
+    const values = { ...defaultValues(), battery: { ...defaultValues().battery, charge_rate_mw: "28", discharge_rate_mw: "25" } };
     const b = physicalBattery(values);
     expect(b.max_charge_mw).toBe(28);
-    expect(b.max_discharge_mw * b.discharge_efficiency).toBeCloseTo(35, 9);
+    expect(b.max_discharge_mw * b.discharge_efficiency).toBeCloseTo(25, 9);
     const back = valuesFromRequest({ battery: b, start: values.start, end: values.end });
     expect(Number(back.battery.charge_rate_mw)).toBeCloseTo(28, 9);
-    expect(Number(back.battery.discharge_rate_mw)).toBeCloseTo(35, 9);
+    expect(Number(back.battery.discharge_rate_mw)).toBeCloseTo(25, 9);
+  });
+
+  it("caps both rates at the power delivered", () => {
+    const withRates = (charge_rate_mw: string, discharge_rate_mw: string) => ({ ...defaultValues(), battery: { ...defaultValues().battery, charge_rate_mw, discharge_rate_mw } });
+    expect(validate(withRates("30", "30"))).toEqual({});
+    expect(validate(withRates("30.1", "30"))["battery.charge_rate_mw"]).toMatch(/At most the power/);
+    expect(validate(withRates("30", "30.1"))["battery.discharge_rate_mw"]).toMatch(/At most the power/);
   });
 
   it("follows the battery while the rates are empty", () => {
