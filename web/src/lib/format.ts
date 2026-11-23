@@ -1,20 +1,23 @@
 // Number formatting for the page. Every formatter takes null (an undefined
-// ratio, a day with nothing traded) and prints "n/a" rather than NaN.
-export const NA = "n/a";
+// ratio, a day with nothing traded) and prints "n/a" rather than NaN. Digits and
+// month names follow the active language; the units never change.
+import { intlLocale, messages } from "../i18n";
+
+const na = () => messages().common.na;
 
 type N = number | null | undefined;
 
 const ok = (value: N): value is number => typeof value === "number" && Number.isFinite(value);
 
 export function brl(value: N, digits = 0): string {
-  if (!ok(value)) return NA;
+  if (!ok(value)) return na();
   const sign = value < 0 ? "-" : "";
-  return `${sign}R$ ${Math.abs(value).toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
+  return `${sign}R$ ${Math.abs(value).toLocaleString(intlLocale(), { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
 }
 
 /** R$ 1.2k, R$ 34k, R$ 1.4m: for axes and tight tiles. */
 export function brlShort(value: N): string {
-  if (!ok(value)) return NA;
+  if (!ok(value)) return na();
   const sign = value < 0 ? "-" : "";
   const abs = Math.abs(value);
   if (abs >= 1e9) return `${sign}R$ ${trim(abs / 1e9, 2)}bn`;
@@ -25,41 +28,39 @@ export function brlShort(value: N): string {
 }
 
 function trim(value: number, digits: number): string {
-  return value.toLocaleString("en-US", { maximumFractionDigits: digits });
+  return value.toLocaleString(intlLocale(), { maximumFractionDigits: digits });
 }
 
 export function num(value: N, digits = 0): string {
-  if (!ok(value)) return NA;
-  return value.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  if (!ok(value)) return na();
+  return value.toLocaleString(intlLocale(), { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
 export function pct(value: N, digits = 1): string {
-  if (!ok(value)) return NA;
-  return `${(value * 100).toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits })}%`;
+  if (!ok(value)) return na();
+  return `${(value * 100).toLocaleString(intlLocale(), { minimumFractionDigits: digits, maximumFractionDigits: digits })}%`;
 }
 
 export function ratio(value: N, digits = 2): string {
-  return ok(value) ? `${num(value, digits)}×` : NA;
+  return ok(value) ? `${num(value, digits)}×` : na();
 }
-
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 /** 2025-03-04 to "4 Mar 2025". */
 export function day(iso: string | null | undefined): string {
-  if (!iso) return NA;
+  if (!iso) return na();
   const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
   if (!y || !m || !d) return iso;
-  return `${d} ${MONTHS[m - 1]} ${y}`;
+  return `${d} ${messages().common.months[m - 1]} ${y}`;
 }
 
 export function monthLabel(iso: string): string {
   const [y, m] = iso.split("-").map(Number);
-  return `${MONTHS[m - 1]} ${y}`;
+  return `${messages().common.months[m - 1]} ${y}`;
 }
 
 export function quarterLabel(iso: string): string {
   const [y, m] = iso.split("-").map(Number);
-  return `Q${Math.floor((m - 1) / 3) + 1} ${y}`;
+  return `${messages().common.quarter}${Math.floor((m - 1) / 3) + 1} ${y}`;
 }
 
 /** 7.5 to "07:30". */
@@ -70,7 +71,7 @@ export function hourLabel(hour: number): string {
 }
 
 export function duration(seconds: N): string {
-  if (!ok(seconds)) return NA;
+  if (!ok(seconds)) return na();
   const s = Math.max(0, Math.round(seconds));
   if (s < 60) return `${s} s`;
   const m = Math.floor(s / 60);

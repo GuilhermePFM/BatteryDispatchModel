@@ -7,6 +7,7 @@
 import { InMemoryWebStorage, UserManager, WebStorageStateStore, type User } from "oidc-client-ts";
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { authMode, cognito, origin } from "../lib/config";
+import { messages } from "../i18n";
 
 export const CALLBACK_PATH = "/auth/callback";
 const DEV_KEY = "batteryplan:dev-user";
@@ -125,7 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     if (!cognito.authority || !cognito.clientId) {
-      window.alert("Sign-in is not configured: set VITE_COGNITO_AUTHORITY and VITE_COGNITO_CLIENT_ID.");
+      window.alert(messages().layout.signInNotConfigured);
       return;
     }
     setPending(true);

@@ -16,7 +16,8 @@ function escapeHtml(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
-export function renderMarkdown(markdown: string): string {
+/** `anchors`, when given, are the ids of the headings in order, instead of their slugs. */
+export function renderMarkdown(markdown: string, anchors?: string[]): string {
   const display: string[] = [];
   const inline: string[] = [];
   let text = markdown.replace(/\$\$([\s\S]+?)\$\$/g, (_m, tex: string) => {
@@ -30,11 +31,13 @@ export function renderMarkdown(markdown: string): string {
   });
 
   const md = new MarkdownIt({ html: false, linkify: false, typographer: false });
+  let headingIndex = 0;
   md.renderer.rules.heading_open = (tokens, idx, options, _env, self) => {
     const title = tokens[idx + 1]?.content ?? "";
     // The id is built from the source text so the table of contents can match it.
     const source = title.replace(/KXINLINE(\d+)KX/g, (_m, n: string) => `$${inline[Number(n)]}$`);
-    tokens[idx].attrSet("id", slugify(source));
+    tokens[idx].attrSet("id", anchors?.[headingIndex] ?? slugify(source));
+    headingIndex += 1;
     return self.renderToken(tokens, idx, options);
   };
   md.renderer.rules.image = (tokens, idx) => {

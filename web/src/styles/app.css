@@ -212,8 +212,24 @@ code {
   color: var(--ink);
 }
 
-.account {
+.header-actions {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.lang-switch {
+  flex: none;
+}
+
+.lang-switch button {
+  font-size: 12px;
+  padding: 3px 7px;
+}
+
+.account {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -243,6 +259,22 @@ code {
   .nav a.hide-sm,
   .account-email {
     display: none;
+  }
+}
+
+.show-xs {
+  display: none;
+}
+
+@media (max-width: 480px) {
+  .show-xs {
+    display: inline-block;
+  }
+  .header-actions {
+    gap: 4px;
+  }
+  .account .btn {
+    padding: 0 8px;
   }
 }
 

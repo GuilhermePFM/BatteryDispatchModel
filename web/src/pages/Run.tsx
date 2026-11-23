@@ -4,6 +4,9 @@ import { Link, useNavigate } from "react-router";
 import templateUrl from "../../../contracts/examples/pld-template.csv?url";
 import { useAuth } from "../auth/AuthProvider";
 import type { Me } from "../contracts/types";
+import { intlLocale, useI18n } from "../i18n";
+import { numberTag, Rich } from "../i18n/Rich";
+import { localizeServerMessage } from "../i18n/server";
 import { api, ApiError, describeError, uploadToPresigned } from "../lib/api";
 import { day, num, pct } from "../lib/format";
 import { sha256Hex } from "../lib/sha256";
@@ -57,15 +60,7 @@ function saveDraft(values: FormValues) {
   }
 }
 
-const plain = (v: number) => v.toLocaleString("en-US", { maximumFractionDigits: 6 });
-function bounds(field: FieldSpec): string {
-  return `${plain(field.min)} and ${plain(field.max)}`;
-}
-
-/** Where the schema's description is written for API clients, the form says it its own way. */
-const HELP: Record<string, string> = {
-  cycle_budget: "Equivalent full cycles the run may spend over the horizon. Leave empty for no budget.",
-};
+const plain = (v: number) => v.toLocaleString(intlLocale(), { maximumFractionDigits: 6 });
 
 interface NumberFieldProps {
   field: FieldSpec;
@@ -79,13 +74,14 @@ interface NumberFieldProps {
 }
 
 function NumberField({ field, name, value, error, optional, help, placeholder, onChange }: NumberFieldProps) {
+  const { t } = useI18n();
   const id = `f-${name}`;
   return (
     <div className="field">
       <label htmlFor={id}>
         <span>
           {field.label}
-          {optional ? <span style={{ color: "var(--muted)", fontWeight: 400 }}> (optional)</span> : null}
+          {optional ? <span style={{ color: "var(--muted)", fontWeight: 400 }}> ({t.run.optional})</span> : null}
         </span>
         <span className="unit">{field.unit}</span>
       </label>
@@ -97,7 +93,7 @@ function NumberField({ field, name, value, error, optional, help, placeholder, o
         autoComplete="off"
         spellCheck={false}
         value={value}
-        placeholder={placeholder ?? (optional ? "no budget" : undefined)}
+        placeholder={placeholder ?? (optional ? t.run.noBudget : undefined)}
         aria-invalid={error ? true : undefined}
         aria-describedby={`${id}-help`}
         onChange={(e) => onChange(e.target.value)}
@@ -108,7 +104,7 @@ function NumberField({ field, name, value, error, optional, help, placeholder, o
         </span>
       ) : (
         <span className="help" id={`${id}-help`}>
-          {help ?? HELP[field.key] ?? field.description} Between {bounds(field)}.
+          {help ?? field.description} {t.run.between(plain(field.min), plain(field.max))}
         </span>
       )}
     </div>
@@ -116,14 +112,10 @@ function NumberField({ field, name, value, error, optional, help, placeholder, o
 }
 
 type Phase = "idle" | "hashing" | "uploading" | "sending";
-const PHASE_LABEL: Record<Phase, string> = {
-  idle: "Run the plan",
-  hashing: "Reading the file",
-  uploading: "Uploading prices",
-  sending: "Queueing the run",
-};
 
 export function Run() {
+  const { locale, t: all } = useI18n();
+  const t = all.run;
   const auth = useAuth();
   const navigate = useNavigate();
   const [values, setValues] = useState<FormValues>(readDraft);
@@ -132,11 +124,13 @@ export function Run() {
   const [fileInfo, setFileInfo] = useState<PriceFileInfo | null>(null);
   const [dragging, setDragging] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
-  const [failure, setFailure] = useState<{ title: string; detail: string } | null>(null);
+  // The error itself, so its text follows a change of language.
+  const [failure, setFailure] = useState<{ error: unknown } | null>(null);
   const [me, setMe] = useState<Me | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
-  const errors: FormErrors = useMemo(() => validate(values, fileInfo), [values, fileInfo]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- what it builds reads the active language
+  const errors: FormErrors = useMemo(() => validate(values, fileInfo), [values, fileInfo, locale]);
   const shown = touched ? errors : {};
   const valid = Object.keys(errors).length === 0;
   const rt = roundTrip(values);
@@ -221,7 +215,7 @@ export function Run() {
       navigate(`/runs/${encodeURIComponent(created.run_id)}`, { state: { cached: created.cached } });
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) auth.dropSession();
-      setFailure(describeError(error));
+      setFailure({ error });
       void refreshMe();
     } finally {
       setPhase("idle");
@@ -238,24 +232,22 @@ export function Run() {
   const warnings = contractWarnings(values);
   const sized = errors["battery.power_mw"] || errors["battery.duration_hours"] || errors["battery.round_trip_efficiency"] || errors["battery.charge_rate_mw"] || errors["battery.discharge_rate_mw"] ? null : physicalBattery(values);
   const automatic = automaticRates(values);
+  const shownFailure = failure ? describeError(failure.error) : null;
   const automaticMw = (key: string) => (key === "charge_rate_mw" ? automatic?.chargeMw : key === "discharge_rate_mw" ? automatic?.dischargeMw : undefined);
 
   return (
     <div className="page">
       <div className="wrap">
         <div className="page-head">
-          <h1>Run your own battery</h1>
-          <p>
-            Change the battery, pick at least a year of the bundled CCEE prices or upload your own PLD, and the solver plans every hour of the four submarkets, contracted and
-            merchant. Its progress shows live while it works. Financial inputs come afterwards, on the results page, and need no new run.
-          </p>
+          <h1>{t.title}</h1>
+          <p>{t.lede}</p>
         </div>
 
         <form className="run-layout" onSubmit={onSubmit} noValidate>
           <div>
             <fieldset className="group">
-              <legend>The battery</legend>
-              <p className="group-note">Defaults are the smallest battery the auction accepts: 30 MW, 4 h delivered, 85% round trip, charging and discharging at 30 MW.</p>
+              <legend>{t.battery}</legend>
+              <p className="group-note">{t.batteryNote}</p>
               <div className="fields">
                 {BATTERY_FIELDS.map((field) => {
                   const auto = automaticMw(field.key);
@@ -267,59 +259,55 @@ export function Run() {
                       value={values.battery[field.key as keyof FormValues["battery"]]}
                       error={shown[`battery.${field.key}`]}
                       optional={field.optional}
-                      placeholder={field.optional ? (auto === undefined ? "automatic" : `automatic: ${num(auto, 2)}`) : undefined}
-                      help={field.optional ? `${field.description} Empty follows the battery.` : undefined}
+                      placeholder={field.optional ? (auto === undefined ? t.automatic : t.automaticValue(num(auto, 2))) : undefined}
+                      help={field.optional ? `${field.description} ${t.emptyFollows}` : undefined}
                       onChange={(v) => setBattery(field.key, v)}
                     />
                   );
                 })}
               </div>
               <p className="derived">
-                {rt ? (
-                  <>
-                    Round trip <span className="num">{pct(rt.efficiency, 2)}</span>: a sale must beat its purchase by{" "}
-                    <span className="num">{pct(rt.markup, 2)}</span> to pay.
-                  </>
-                ) : (
-                  "Enter the efficiency to see the round trip."
-                )}
+                {rt ? <Rich text={t.derivedRoundTrip(pct(rt.efficiency, 2), pct(rt.markup, 2))} tags={numberTag} /> : t.derivedEmpty}
                 {sized ? (
-                  <>
-                    {" "}
-                    Nominal volume <span className="num">{num(sized.volume_mwh, 1)} MWh</span>, charging at up to <span className="num">{num(sized.max_charge_mw, 2)} MW</span> and discharging at up to{" "}
-                    <span className="num">{num(sized.max_discharge_mw * sized.discharge_efficiency, 2)} MW</span>. A full recharge takes{" "}
-                    <span className="num">{num(sized.volume_mwh / (sized.charge_efficiency * sized.max_charge_mw), 2)} h</span>.
-                  </>
+                  <Rich
+                    text={t.derivedSize(
+                      num(sized.volume_mwh, 1),
+                      num(sized.max_charge_mw, 2),
+                      num(sized.max_discharge_mw * sized.discharge_efficiency, 2),
+                      num(sized.volume_mwh / (sized.charge_efficiency * sized.max_charge_mw), 2),
+                    )}
+                    tags={numberTag}
+                  />
                 ) : null}
               </p>
               {warnings.map((warning) => (
                 <p className="help" key={warning}>
-                  {warning} The merchant case still runs.
+                  {warning} {t.merchantStillRuns}
                 </p>
               ))}
             </fieldset>
 
             <fieldset className="group">
-              <legend>Horizon and planning</legend>
+              <legend>{t.horizon}</legend>
               <p className="group-note">
-                One program over the whole horizon, per submarket and case (<Link to="/methodology#one-program-per-horizon">why</Link>). Between {MIN_SPAN_DAYS + 1} and {MAX_SPAN_DAYS + 1} days, so every calendar month is seen.
+                <Rich text={t.horizonNote(MIN_SPAN_DAYS + 1, MAX_SPAN_DAYS + 1)} tags={{ why: (text) => <Link to="/methodology#one-program-per-horizon">{text}</Link> }} />
               </p>
               <div className="fields">
                 <div className="field">
                   <label htmlFor="f-start">
-                    <span>Start</span>
-                    <span className="unit">date</span>
+                    <span>{t.start}</span>
+                    <span className="unit">{t.date}</span>
                   </label>
                   <input id="f-start" type="date" value={values.start} min={dateMin} max={dateMax} onChange={onChangeDate("start")} aria-invalid={shown.start ? true : undefined} />
-                  {shown.start ? <span className="error-text">{shown.start}</span> : <span className="help">From {day(dateMin)}.</span>}
+                  {shown.start ? <span className="error-text">{shown.start}</span> : <span className="help">{t.from(day(dateMin))}</span>}
                 </div>
                 <div className="field">
                   <label htmlFor="f-end">
-                    <span>End</span>
-                    <span className="unit">date, inclusive</span>
+                    <span>{t.end}</span>
+                    <span className="unit">{t.dateInclusive}</span>
                   </label>
                   <input id="f-end" type="date" value={values.end} min={dateMin} max={dateMax} onChange={onChangeDate("end")} aria-invalid={shown.end ? true : undefined} />
-                  {shown.end ? <span className="error-text">{shown.end}</span> : <span className="help">{span ? `${num(span)} days.` : `Up to ${day(dateMax)}.`}</span>}
+                  {shown.end ? <span className="error-text">{shown.end}</span> : <span className="help">{span ? t.days(num(span)) : t.upTo(day(dateMax))}</span>}
                 </div>
                 <NumberField
                   field={CYCLE_BUDGET_FIELD}
@@ -333,10 +321,9 @@ export function Run() {
             </fieldset>
 
             <fieldset className="group">
-              <legend>Prices</legend>
+              <legend>{t.prices}</legend>
               <p className="group-note">
-                Leave this empty to use the bundled CCEE prices. Your own file must have the header <code>hora,submercado,pld</code>, local time, one row per hour and
-                submarket in BRL/MWh, all above zero, and be at most 5 MB. The template shows the format with two days.
+                <Rich text={t.pricesNote} tags={{ code: (text) => <code>{text}</code> }} />
               </p>
               <div
                 className={`drop${dragging ? " dragging" : ""}`}
@@ -356,7 +343,7 @@ export function Run() {
                         type="button"
                         className="btn-quiet"
                         style={{ border: 0, background: "none", cursor: "pointer", padding: 0, color: "inherit", display: "inline-flex" }}
-                        aria-label="Remove the file"
+                        aria-label={t.removeFile}
                         onClick={() => {
                           void chooseFile(null);
                           if (fileInput.current) fileInput.current.value = "";
@@ -367,11 +354,11 @@ export function Run() {
                     </span>
                   ) : (
                     <button type="button" className="btn btn-secondary btn-sm" onClick={() => fileInput.current?.click()}>
-                      <FileCsv size={16} aria-hidden="true" /> Choose a CSV
+                      <FileCsv size={16} aria-hidden="true" /> {t.chooseCsv}
                     </button>
                   )}
                   <a className="btn btn-quiet" href={templateUrl} download="pld-template.csv">
-                    <DownloadSimple size={16} aria-hidden="true" /> Template
+                    <DownloadSimple size={16} aria-hidden="true" /> {t.template}
                   </a>
                 </div>
                 <input
@@ -379,20 +366,18 @@ export function Run() {
                   type="file"
                   accept=".csv,text/csv"
                   className="visually-hidden"
-                  aria-label="Price file"
+                  aria-label={t.priceFile}
                   tabIndex={-1}
                   onChange={(e) => void chooseFile(e.target.files?.[0] ?? null)}
                 />
                 {fileInfo?.problem ? (
                   <span className="error-text" role="alert">
-                    {fileInfo.problem}
+                    {localizeServerMessage(fileInfo.problem)}
                   </span>
                 ) : fileInfo ? (
-                  <span className="help">
-                    {num(fileInfo.size / 1024, 0)} KB, from {day(fileInfo.firstDay)} to {day(fileInfo.lastDay)}. The solver checks it again when the run starts.
-                  </span>
+                  <span className="help">{t.fileInfo(num(fileInfo.size / 1024, 0), day(fileInfo.firstDay), day(fileInfo.lastDay))}</span>
                 ) : (
-                  <span className="help">Or drop a file here.</span>
+                  <span className="help">{t.drop}</span>
                 )}
               </div>
             </fieldset>
@@ -402,40 +387,38 @@ export function Run() {
             <div className="aside-panel">
               <div className="summary">
                 <span>
-                  <span className="num">{span ? num(span) : "?"}</span> days, <span className="num">{span ? num(span * 24) : "?"}</span> hours
+                  <Rich text={t.summary(span ? num(span) : "?", span ? num(span * 24) : "?")} tags={numberTag} />
                 </span>
-                <span>{file ? `Prices from ${file.name}` : "Bundled CCEE PLD, 2025 to 2026"}</span>
+                <span>{file ? t.pricesFrom(file.name) : t.bundled}</span>
               </div>
-              {failure ? (
+              {shownFailure ? (
                 <div className="banner error" role="alert">
                   <WarningCircle size={18} aria-hidden="true" />
                   <span>
-                    <span className="banner-title">{failure.title}.</span> {failure.detail}
+                    <span className="banner-title">{shownFailure.title}.</span> {shownFailure.detail}
                   </span>
                 </div>
               ) : null}
-              {touched && !valid ? <span className="error-text">Fix the highlighted fields to run.</span> : null}
+              {touched && !valid ? <span className="error-text">{t.fixFields}</span> : null}
               {auth.account ? (
                 <>
                   <button type="submit" className="btn btn-primary" disabled={busy}>
-                    {PHASE_LABEL[phase]}
+                    {t.phase[phase]}
                   </button>
                   <p className="quota">
                     {quota ? (
-                      <>
-                        <strong>{quota.quota.remaining}</strong> of {quota.quota.limit} runs left today. Repeats are free.
-                      </>
+                      <Rich text={t.quota(quota.quota.remaining, quota.quota.limit)} tags={{ b: (text) => <strong>{text}</strong> }} />
                     ) : (
-                      "Checking today's runs."
+                      t.checkingQuota
                     )}
                   </p>
                 </>
               ) : (
                 <>
                   <button type="submit" className="btn btn-primary">
-                    <SignIn size={16} weight="bold" aria-hidden="true" /> Sign in to run
+                    <SignIn size={16} weight="bold" aria-hidden="true" /> {t.signInToRun}
                   </button>
-                  <p className="quota">With Google. Three runs a day per account; the form keeps what you typed.</p>
+                  <p className="quota">{t.signInNote}</p>
                 </>
               )}
             </div>

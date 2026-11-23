@@ -1,6 +1,8 @@
 // The HTTP API of contracts/platform.md. Errors come back as
 // {"error": {"code", "message"}}, the message written for the user.
 import type { Me, RunCreated, RunRecord, RunRequest, UploadTicket } from "../contracts/types";
+import { messages } from "../i18n";
+import { localizeServerMessage } from "../i18n/server";
 import { sha256Hex } from "./sha256";
 
 export class ApiError extends Error {
@@ -106,46 +108,40 @@ export async function uploadToPresigned(ticket: UploadTicket, file: Blob, name: 
 }
 
 function untilLabel(seconds: number): string {
-  if (seconds < 90) return `${Math.max(1, Math.round(seconds))} seconds`;
+  const t = messages().errors;
+  if (seconds < 90) return t.seconds(Math.max(1, Math.round(seconds)));
   const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes} minutes`;
+  if (minutes < 60) return t.minutes(minutes);
   const hours = Math.floor(minutes / 60);
   return `${hours} h ${minutes % 60} min`;
 }
 
 /** What to tell the user about a failed call: a title and a sentence they can act on. */
 export function describeError(error: unknown): { title: string; detail: string } {
+  const t = messages().errors;
   if (!(error instanceof ApiError)) {
-    return { title: "Something went wrong", detail: error instanceof Error ? error.message : String(error) };
+    return { title: t.generic, detail: error instanceof Error ? error.message : String(error) };
   }
   const wait = error.retryAfter !== null ? untilLabel(error.retryAfter) : null;
+  const detail = localizeServerMessage(error.message);
   switch (error.code) {
     case "quota_exceeded":
-      return {
-        title: "You have used today's 3 runs",
-        detail: `The count resets at midnight UTC${wait ? `, in ${wait}` : ""}. Repeating a run you already made is free: it is answered from the earlier result.`,
-      };
+      return { title: t.quotaTitle, detail: t.quotaDetail(wait) };
     case "global_cap":
-      return {
-        title: "The site has reached today's limit",
-        detail: `All 60 runs for today have been used across every account. Try again after midnight UTC${wait ? `, in ${wait}` : ""}.`,
-      };
+      return { title: t.capTitle, detail: t.capDetail(wait) };
     case "rate_limited":
-      return {
-        title: "Too many requests",
-        detail: `Your network sent more than 60 requests in a minute. Wait ${wait ?? "a minute"} and try again.`,
-      };
+      return { title: t.rateTitle, detail: t.rateDetail(wait ?? t.aMinute) };
     case "unauthorized":
-      return { title: "Sign in again", detail: "Your session is missing or has expired. Sign in and send the run again; the form keeps its values." };
+      return { title: t.authTitle, detail: t.authDetail };
     case "request_invalid":
-      return { title: "The server rejected the request", detail: error.message };
+      return { title: t.requestTitle, detail };
     case "prices_invalid":
-      return { title: "The price file was rejected", detail: error.message };
+      return { title: t.pricesTitle, detail };
     case "not_found":
-      return { title: "Run not found", detail: "No run has this id. Runs are deleted 7 days after they are made." };
+      return { title: t.notFoundTitle, detail: t.notFoundDetail };
     case "unavailable":
-      return { title: "The queue is unavailable", detail: "The run was not queued and not counted against your quota. Try again in a moment." };
+      return { title: t.unavailableTitle, detail: t.unavailableDetail };
     default:
-      return { title: error.status ? `Error ${error.status}` : "Network error", detail: error.message };
+      return { title: error.status ? t.status(error.status) : t.network, detail };
   }
 }

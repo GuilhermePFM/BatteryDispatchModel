@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Result } from "../contracts/types";
+import { useI18n } from "../i18n";
 import { Chart } from "./Chart";
 import type { ChartOption } from "./echarts";
 import { usePalette, type Palette } from "./theme";
@@ -41,9 +42,11 @@ interface FigureProps {
 }
 
 export function Figure({ title, note, result, build, height, label, available = true, empty, controls, className }: FigureProps) {
+  const { locale, t } = useI18n();
   const palette = usePalette();
   const [ref, near] = useNearViewport();
-  const option = useMemo(() => (available && near ? build(result, palette) : null), [available, near, build, result, palette]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- what it builds reads the active language
+  const option = useMemo(() => (available && near ? build(result, palette) : null), [available, near, build, result, palette, locale]);
   return (
     <figure className={`fig ${className ?? ""}`} style={{ margin: 0 }}>
       <div className="fig-head">
@@ -56,7 +59,7 @@ export function Figure({ title, note, result, build, height, label, available = 
       <div ref={ref}>
         {!available ? (
           <div className="fig-empty" style={{ height: Math.min(height, 160) }}>
-            {empty ?? "Nothing to draw for this run."}
+            {empty ?? t.dashboard.nothing}
           </div>
         ) : option ? (
           <Chart option={option} height={height} label={label} />
