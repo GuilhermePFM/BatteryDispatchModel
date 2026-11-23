@@ -16,7 +16,7 @@ export const repoUrl = (import.meta.env.VITE_REPO_URL ?? "https://github.com/Gui
 
 export const scenarioUrl = import.meta.env.VITE_SCENARIO_URL || "/scenarios/pld-2025-2026.json";
 
-export const contactEmail = "guilhermepfm@gmail.com";
+export const contactEmail = "gui@gmachado.dev";
 
 export function origin(): string {
   return typeof window === "undefined" ? "http://localhost" : window.location.origin;

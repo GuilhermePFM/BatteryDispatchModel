@@ -227,6 +227,10 @@ data/results/*
 notes/
 plano/
 docs/model/study.md
+docs/proposta/
 
 # Claude Code worktrees
 .claude/worktrees/
+
+# Spreadsheet inputs stay out of this public repository.
+data/raw/*.xlsx

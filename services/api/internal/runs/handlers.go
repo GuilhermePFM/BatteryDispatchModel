@@ -125,6 +125,10 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.PricesKey == "" && !s.BundledPrices {
+		writeError(w, http.StatusBadRequest, "request_invalid", "Upload a price file: this deployment has no bundled prices.")
+		return
+	}
 	pricesSHA, jobPrices := contracts.BundledPricesSHA256, map[string]string{"source": "bundled"}
 	if req.PricesKey != "" {
 		pricesSHA = prices.KeySHA256(req.PricesKey)
