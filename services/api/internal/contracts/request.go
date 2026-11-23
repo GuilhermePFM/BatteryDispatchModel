@@ -9,17 +9,29 @@ import (
 	"time"
 )
 
-// BundledPricesSHA256 is the content hash of the bundled 2018-2020 prices,
-// battery_plan.contracts.BUNDLED_PRICES_SHA256.
-const BundledPricesSHA256 = "f26dc09b7eb4bcb3755b615c0595132937dee3dbb4b82e915648be7e53a95ce9"
+// BundledPricesSHA256 is the content hash of the bundled hourly PLD,
+// battery_plan.contracts.BUNDLED_PLD_SHA256.
+const BundledPricesSHA256 = "2431c61473ae39b0ed949364306974e6ee8b5b88d8d051d6bedb19a688c9b839"
 
-var (
-	bundledFirst = time.Date(2018, 1, 1, 0, 0, 0, 0, time.UTC)
-	bundledLast  = time.Date(2020, 12, 31, 0, 0, 0, 0, time.UTC)
+// ContractVersion and ModelVersion are battery_plan.contracts.CONTRACT_VERSION
+// and MODEL_VERSION; the v2 schemas pin both.
+const (
+	ContractVersion = 2
+	ModelVersion    = "pld-hourly-1"
 )
 
-// MaxSpanDays is the longest end - start a request may ask for.
-const MaxSpanDays = 365
+var (
+	bundledFirst = time.Date(2025, 1, 20, 0, 0, 0, 0, time.UTC)
+	bundledLast  = time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC)
+)
+
+// MinSpanDays and MaxSpanDays bound end - start. Any 365 consecutive days hold
+// all twelve calendar months, which the balanced year needs; the ceiling keeps
+// the worst case inside the solver Lambda's 600 s.
+const (
+	MinSpanDays = 364
+	MaxSpanDays = 730
+)
 
 // Request is a run request that passed the schema and the cross-field rules.
 type Request struct {
@@ -56,31 +68,44 @@ func ParseRequest(body []byte) (*Request, error) {
 	if end.Before(start) {
 		return nil, &InvalidError{"end must not be before start."}
 	}
-	if end.Sub(start) > MaxSpanDays*24*time.Hour {
+	span := end.Sub(start)
+	if span < MinSpanDays*24*time.Hour {
+		return nil, &InvalidError{fmt.Sprintf("A run covers at least %d days, so that every calendar month is in it; extend the dates.", MinSpanDays+1)}
+	}
+	if span > MaxSpanDays*24*time.Hour {
 		return nil, &InvalidError{fmt.Sprintf("A run covers at most %d days after its start; shorten the dates.", MaxSpanDays)}
 	}
 	key, _ := fields["prices_key"].(string)
 	if key == "" && (start.Before(bundledFirst) || end.After(bundledLast)) {
-		return nil, &InvalidError{"The bundled prices run from 2018-01-01 to 2020-12-31; pick dates inside them or upload a price file."}
+		return nil, &InvalidError{"The bundled prices run from 2025-01-20 to 2026-11-20; pick dates inside them or upload a price file."}
 	}
 	return &Request{Fields: fields, Start: start, End: end, PricesKey: key}, nil
 }
 
-// ParamsHash is the hash of contracts/README.md: sha256 of the canonical JSON
-// of {"prices_sha256": ..., "request": ...}, prices_key left out.
+// ParamsHash is the hash of contracts/README.md: sha256 of the canonical
+// JSON of {"model_version": ..., "prices_sha256": ..., "request": ...},
+// prices_key left out.
 func ParamsHash(request map[string]any, pricesSHA256 string) (string, error) {
+	canonical, err := CanonicalJSON(map[string]any{
+		"model_version": ModelVersion,
+		"prices_sha256": pricesSHA256,
+		"request":       withoutPricesKey(request),
+	})
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(canonical)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+func withoutPricesKey(request map[string]any) map[string]any {
 	body := make(map[string]any, len(request))
 	for k, v := range request {
 		if k != "prices_key" {
 			body[k] = v
 		}
 	}
-	canonical, err := CanonicalJSON(map[string]any{"prices_sha256": pricesSHA256, "request": body})
-	if err != nil {
-		return "", err
-	}
-	sum := sha256.Sum256(canonical)
-	return hex.EncodeToString(sum[:]), nil
+	return body
 }
 
 // CanonicalJSON writes the JCS form (RFC 8785) of the values a request holds.

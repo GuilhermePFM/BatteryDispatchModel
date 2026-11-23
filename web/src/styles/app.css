@@ -1,7 +1,7 @@
 /*
   BatteryPlan. One theme per page, following the system (light or dark).
-  Palette: the documents' own (scripts/plot_cutting_plane.py): blue is Market 1
-  and charging, orange Market 2 and delivering. Orange is the one UI accent.
+  Palette: blue is charging, orange is delivering. Orange is the one UI
+  accent.
   Radii: 8px for controls (buttons, inputs), 14px for panels. Nothing else.
 */
 :root {

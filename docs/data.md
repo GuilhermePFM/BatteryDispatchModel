@@ -1,94 +1,53 @@
 # The inputs
 
-*The two spreadsheets, what they contain, and the artefact that shapes how the
-model pairs them.*
+*The CCEE hourly PLD, how the canonical file is built from its exports, and what
+an uploaded file must satisfy.*
 
 [← README](../README.md) · [architecture](architecture.md) · [solve](solve.md) ·
-[cycle budget](cycle-budget.md) · [validation](validation.md) ·
-[glossary](glossary.md)
+[validation](validation.md) · [glossary](glossary.md)
 
 ---
 
-## Attachment 1: the battery
+## The source
 
-`data/raw/attachment_1_battery_spec.xlsx`
+`data/raw/ccee/` holds the hourly PLD as exported from the CCEE panel. The panel
+exports at most six months at a time, as a wide CSV (`;`, decimal comma) with
+`Hora`, `Submercado` and one column per day. Market facts and sources are in
+[`mercado-brasileiro.md`](mercado-brasileiro.md).
+
+## The canonical file
+
+`data/raw/pld_hourly.csv` (`hora,submercado,pld`) is built from the exports:
+
+```bash
+uv run python scripts/build_pld_csv.py
+```
 
 | | |
 | --- | --- |
-| Charge / discharge rate | 2 MW each way |
-| Storage volume | 4 MWh (fills in two hours) |
-| Charge loss | 5% |
-| Discharge loss | 5% |
-| Lifetime | 10 years / 5,000 cycles |
-| Degradation | 0.001% of volume per equivalent full cycle |
-| Capex | £500,000 |
-| Fixed opex | £5,000 / year |
+| Span | 2025-01-20 to 2026-11-20, 670 days |
+| Rows | 16,080 hours × 4 submarkets, unique on (`hora`, `submercado`), no gaps |
+| Unit | BRL/MWh |
+| Integrity | `battery_plan.data_io.load_pld` checks its pinned SHA-256 |
 
-Capex and fixed opex appear nowhere in the dispatch objective: per §5 of the
-formulation they do not depend on the decision. They belong to the investment
-question rather than to the dispatch one.
+Three decisions shape it:
 
-`BatterySpec` holds these ten fields **in the spreadsheet's own units**, loss
-fractions as fractions and degradation in percent, so that the loader can be
-checked against the file line by line. Every unit conversion happens once, in
-`ModelParameters.from_spec`.
+- **Overlaps are checked, not assumed.** The raw files overlap on 20/06/2025,
+  20/12/2025 and 20/06/2026 (288 rows, identical values). The builder keeps one
+  occurrence and **fails** if a future overlap disagrees.
+- **Timestamps stay in local time.** Converting `-03:00` to UTC would shift the
+  daily price profile by three hours.
+- **Prices must be positive.** The no-binary argument of §5.1 of the
+  [formulation](model/model.md) depends on it, so a price at or below zero is
+  rejected rather than cleaned.
 
-## Attachment 2: the prices
+## Uploaded files
 
-`data/raw/attachment_2_market_prices.xlsx`, £/MWh over 2018-01-01 to 2020-12-31.
-
-| Market | Resolution | Rows | Note |
-| --- | --- | --: | --- |
-| Market 1 | half-hourly | 52,608 | the settlement periods the model runs on |
-| Market 2 | hourly | 26,304 | written on the half-hourly axis with blank rows on the half hours |
-
-The blank half-hour rows are dropped on load, so each series keeps its own
-native resolution. The hourly price is repeated across its two half hours later,
-in `build_periods`, where it is a modelling step rather than a loading one.
-
-## The quirks, surfaced and deliberately not repaired
-
-`uv run battery-plan inputs` prints a quality report. `price_quality_report`
-counts duplicate timestamps, irregular steps and monotonicity per market, and
-*returns* them. It is not a cleaner: how to treat these periods is a modelling
-decision, so it is made visibly in `modelling/periods.py` rather than invisibly on
-load.
-
-**1. Market 1 mislabels the spring clock change.** At 2018-03-25, 2019-03-31
-and 2020-03-29 the sheet labels the 01:00–02:00 hour as 02:00, repeating two
-half hours, so the index is not monotonic there. Neither market repeats the
-extra hour at the autumn changes.
-
-```
-Market 1 labels    …  00:30   01:00   01:30   02:00   02:00   02:30  …
-Market 2 labels    …          01:00           02:00           02:30  …   ← canonical
-                                                   ↑ the duplicate label
-```
-
-`build_periods` takes **Market 2's labels as canonical**, which repairs the
-artefact without moving any price off the period it was quoted for.
-
-**2. Excel float timestamps.** Market 2's timestamps are stored as floats and
-some land on `00:59:59.999`. The loader rounds them to the minute.
-
-**3. Row order carries meaning.** It is the order the settlement periods occur
-in, and the half-hourly axis relies on it, so the loader preserves it.
-
-## Why pairing is positional
-
-Because of quirk 1, the two series cannot be joined on their labels. They are
-paired by **position**: every day holds exactly 48 and 24 rows, so position is
-trustworthy where the Market 1 labels are not.
-
-For the same reason `MarketPrices.between()` filters with a boolean mask rather
-than `.loc` slicing. Label slicing on a non-monotonic index would raise.
-
-Four tests cover this ground (`test_data_io.py`), plus the relabelling itself in
-`test_periods.py`. See [validation](validation.md).
-
-## Missing rows fail loudly
-
-`load_battery_spec` reads Attachment 1 through `_SPEC_FIELDS`, an explicit
-*spreadsheet label → field name* map, and raises listing **every** missing row
-rather than producing a spec with a silent default. A renamed row in the source
-file then fails outright instead of yielding a plausible wrong answer.
+A user can run the model on their own prices, in the canonical format. The same
+check exists in Python (`check_pld_csv`), Go (`CheckPLD`) and TypeScript
+(`checkPldCsv`), and all three must return the verdicts in
+[`contracts/examples/pld-upload-verdicts.json`](../contracts/examples/pld-upload-verdicts.json).
+It rejects offsets, duplicate keys, gaps, incomplete hours, partial days and
+prices at or below zero, with a message naming the line to fix.
+[`contracts/examples/pld-template.csv`](../contracts/examples/pld-template.csv)
+is a valid file to start from.

@@ -7,9 +7,9 @@
 **/__pycache__/
 **/*.pyc
 .zed/
-notebooks/
 notes/
+plano/
+docs/leilao-lrcap-2026/
 data/results/
-data/raw/.~lock.*
 docs/model/*.html
 docs/model/*.pdf

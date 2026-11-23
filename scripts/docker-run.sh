@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Run the model in Docker, on any machine, with no local Python or solver.
 #
-#   scripts/docker-run.sh                          # full dispatch, all three years
-#   scripts/docker-run.sh inputs                   # spec + data quality
-#   scripts/docker-run.sh dispatch --start 2018-01-01 --end 2018-01-31
+#   scripts/docker-run.sh                          # the 4 x 2 portfolio, every day of the PLD
+#   scripts/docker-run.sh inputs                   # coverage and level of the PLD
+#   scripts/docker-run.sh dispatch --start 2025-02-01 --end 2026-01-31
 #   scripts/docker-run.sh --shell                  # a shell inside the image
 #   DEV=1 scripts/docker-run.sh --shell            # same, with pytest/mypy/ruff
 #

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import resultExample from "../../../contracts/examples/result.example.json";
+import resultExample from "../../../contracts/examples/v2/result.example.json";
 import type { Result } from "../contracts/types";
 import {
   bandHeight,
@@ -15,7 +15,7 @@ import {
   quantile,
   scatter,
 } from "./adapters";
-import { ALL_BUILDERS, profitScatter } from "./options";
+import { ALL_BUILDERS, cashFlowChart, dailyPriceBand, netPowerHeatmap, priceProfile } from "./options";
 import { DARK, LIGHT } from "./theme";
 
 const example = resultExample as unknown as Result;
@@ -71,20 +71,19 @@ describe("adapters keep nulls as gaps", () => {
   });
 });
 
-/** The example with every column nulled and every nullable scalar null. */
+const detailBlocks = (r: Result) => [r.detail.daily, r.detail.profile, r.detail.week] as Record<string, unknown>[];
+
+/** The example with every numeric column of the detail nulled. */
 function nulled(result: Result): Result {
   const copy = structuredClone(result);
-  for (const block of Object.values(copy.series)) {
-    for (const [key, value] of Object.entries(block as Record<string, unknown>)) {
-      if (Array.isArray(value) && value.every((v) => typeof v === "number" || v === null) && !["hour", "edges", "counts", "year"].includes(key)) {
-        (block as Record<string, unknown>)[key] = value.map(() => null);
+  for (const block of detailBlocks(copy)) {
+    for (const [key, value] of Object.entries(block)) {
+      if (Array.isArray(value) && value.every((v) => typeof v === "number" || v === null) && key !== "hour") {
+        block[key] = value.map(() => null);
       }
     }
   }
-  copy.series.net_power.values = copy.series.net_power.values.map((row) => row.map(() => null));
-  copy.cycles.prorated_crossed_at = null;
-  copy.cycles.realised_margin_gbp_per_mwh = null;
-  copy.certificate = null;
+  copy.detail.net_power.permille = copy.detail.net_power.permille.map((row) => row.map(() => null as unknown as number));
   return copy;
 }
 
@@ -109,20 +108,41 @@ describe("chart options", () => {
 
   it("build from an empty horizon", () => {
     const none = structuredClone(example);
-    for (const block of Object.values(none.series)) {
+    for (const block of [...detailBlocks(none), none.detail.net_power as unknown as Record<string, unknown>]) {
       for (const key of Object.keys(block)) {
-        const value = (block as Record<string, unknown>)[key];
-        if (Array.isArray(value)) (block as Record<string, unknown>)[key] = [];
+        if (Array.isArray(block[key])) block[key] = [];
       }
     }
     for (const build of ALL_BUILDERS) expect(() => build(none, LIGHT)).not.toThrow();
   });
 
-  it("draws the fit line only where a fit exists", () => {
-    const option = profitScatter(example, LIGHT, "harvestable_spread") as { series: { data: unknown[] }[] };
-    expect(option.series[1].data).toHaveLength(2);
-    const flat = profitScatter(nulled(example), LIGHT, "harvestable_spread") as { series: { data: unknown[] }[] };
-    expect(flat.series[0].data).toHaveLength(0);
-    expect(flat.series[1].data).toHaveLength(0);
+  it("leaves the price axis uncapped: the PLD goes far past 200", () => {
+    const high = structuredClone(example);
+    high.detail.daily.price_max = high.detail.daily.price_max.map(() => 1500);
+    const option = dailyPriceBand(high, LIGHT) as { yAxis: { max?: number } };
+    expect(option.yAxis.max).toBeUndefined();
+  });
+
+  it("labels a day of 24 hours, in BRL", () => {
+    const heat = netPowerHeatmap(example, LIGHT) as { yAxis: { data: string[] } };
+    expect(heat.yAxis.data).toHaveLength(24);
+    expect(heat.yAxis.data[23]).toBe("23:00");
+    const profile = priceProfile(example, LIGHT) as { xAxis: { data: string[] }; yAxis: { name: string } };
+    expect(profile.xAxis.data).toHaveLength(24);
+    expect(profile.yAxis.name).toContain("R$");
+  });
+
+  it("converts the heatmap's permille to MW", () => {
+    const one = structuredClone(example);
+    one.detail.net_power = { date: ["2025-02-01"], permille: [[500, ...new Array<number>(23).fill(0)]] };
+    const option = netPowerHeatmap(one, LIGHT) as { series: { data: [number, number, number][] }[] };
+    expect(option.series[0].data[0]).toEqual([0, 0, 0.5 * one.battery.power_mw]);
+  });
+
+  it("charts the capex as year zero of the cash flows", () => {
+    const flows = [{ year: 1, capacity: 1, revenue: 10, opex: 1, depreciation: 1, tax: 1, replacement: 0, cashFlow: 8 }];
+    const option = cashFlowChart(flows, 100, LIGHT) as { xAxis: { data: string[] }; series: { data: unknown[] }[] };
+    expect(option.xAxis.data).toEqual(["0", "1"]);
+    expect(option.series[1].data).toEqual([-100, -92]);
   });
 });

@@ -1,12 +1,12 @@
-// Package contracts holds the API's side of contracts/: the JSON Schemas, the
+// Package contracts holds the API's side of contracts/v2: the JSON Schemas, the
 // cross-field rules of contracts/README.md, and the params hash.
 //
 // Go's embed cannot reach ../../../../contracts, so the schemas are copied
-// into schemas/ by go generate; TestSchemasMatchContracts fails when the
+// into schemas/v2/ by go generate; TestSchemasMatchContracts fails when the
 // copies drift from the originals.
 package contracts
 
-//go:generate sh -c "cp ../../../../contracts/*.schema.json schemas/"
+//go:generate sh -c "cp ../../../../contracts/v2/*.schema.json schemas/v2/"
 
 import (
 	"bytes"
@@ -17,10 +17,10 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
-//go:embed schemas/*.schema.json
+//go:embed schemas/v2/*.schema.json
 var schemaFiles embed.FS
 
-// SchemaFiles is the embedded copy of contracts/*.schema.json.
+// SchemaFiles is the embedded copy of contracts/v2/*.schema.json.
 func SchemaFiles() embed.FS { return schemaFiles }
 
 const idPrefix = "https://batteryplan.invalid/contracts/"
@@ -28,20 +28,25 @@ const idPrefix = "https://batteryplan.invalid/contracts/"
 // Schemas are compiled once: all four files go into the compiler's registry
 // under their $id, so the relative $refs resolve without fetching anything.
 var (
-	RunRequest = mustCompile("run-request.schema.json")
-	JobMessage = mustCompile("job-message.schema.json")
-	RunRecord  = mustCompile("run-record.schema.json")
+	RunRequest = mustCompile("v2/", "run-request.schema.json")
+	JobMessage = mustCompile("v2/", "job-message.schema.json")
+	RunRecord  = mustCompile("v2/", "run-record.schema.json")
+	Result     = mustCompile("v2/", "result.schema.json")
 )
 
-func mustCompile(name string) *jsonschema.Schema {
+func mustCompile(version, name string) *jsonschema.Schema {
 	c := jsonschema.NewCompiler()
 	c.AssertFormat()
-	entries, err := schemaFiles.ReadDir("schemas")
+	dir := "schemas/" + version
+	entries, err := schemaFiles.ReadDir(strings.TrimSuffix(dir, "/"))
 	if err != nil {
 		panic(err)
 	}
 	for _, e := range entries {
-		raw, err := schemaFiles.ReadFile("schemas/" + e.Name())
+		if e.IsDir() {
+			continue
+		}
+		raw, err := schemaFiles.ReadFile(dir + e.Name())
 		if err != nil {
 			panic(err)
 		}
@@ -49,11 +54,11 @@ func mustCompile(name string) *jsonschema.Schema {
 		if err != nil {
 			panic(fmt.Errorf("%s: %w", e.Name(), err))
 		}
-		if err := c.AddResource(idPrefix+e.Name(), doc); err != nil {
+		if err := c.AddResource(idPrefix+version+e.Name(), doc); err != nil {
 			panic(err)
 		}
 	}
-	return c.MustCompile(idPrefix + name)
+	return c.MustCompile(idPrefix + version + name)
 }
 
 // Validate checks a JSON document against a schema and returns an error

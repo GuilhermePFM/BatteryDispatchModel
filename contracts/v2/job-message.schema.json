@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://batteryplan.invalid/contracts/v2/job-message.schema.json",
+  "title": "Job message, version 2",
+  "description": "SQS message body the API sends the solver: one run to compute. The request has already been validated, including the cross-field rules of contracts/README.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "model_version", "run_id", "params_hash", "user_sub", "request", "prices"],
+  "properties": {
+    "version": {
+      "description": "Contract version of this message.",
+      "const": 2
+    },
+    "model_version": {
+      "description": "The model the params hash was computed for. A solver on another model refuses the message.",
+      "const": "pld-hourly-1"
+    },
+    "run_id": {
+      "description": "Identifier of the run record the solver reports into.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "params_hash": {
+      "description": "sha256 of the canonical request, the model version and the prices' content hash, lowercase hex (contracts/README.md).",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "user_sub": {
+      "description": "Subject claim of the user who submitted the run.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "request": {
+      "$ref": "run-request.schema.json"
+    },
+    "prices": {
+      "description": "Where the solver reads the prices from.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source"],
+          "properties": {
+            "source": {
+              "description": "The canonical CCEE hourly PLD packaged with the solver.",
+              "const": "bundled"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source", "bucket", "key"],
+          "properties": {
+            "source": {
+              "description": "An uploaded CSV in S3, with the header hora,submercado,pld.",
+              "const": "s3"
+            },
+            "bucket": {
+              "type": "string",
+              "minLength": 1
+            },
+            "key": {
+              "type": "string",
+              "pattern": "^uploads/[0-9a-f]{64}\\.csv$"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

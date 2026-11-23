@@ -159,7 +159,7 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request) {
 	created := store.Timestamp(now)
 	expires := store.Epoch(now.Add(store.RunTTL))
 	run, err := attributevalue.MarshalMap(map[string]any{
-		"version": 1, "run_id": runID, "user_sub": user.Sub, "params_hash": hash,
+		"version": contracts.ContractVersion, "run_id": runID, "user_sub": user.Sub, "params_hash": hash,
 		"status": "queued", "request": req.Fields, "created_at": created, "updated_at": created,
 	})
 	if err != nil {
@@ -207,7 +207,8 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	job, _ := json.Marshal(map[string]any{
-		"version": 1, "run_id": runID, "params_hash": hash, "user_sub": user.Sub,
+		"version": contracts.ContractVersion, "model_version": contracts.ModelVersion,
+		"run_id": runID, "params_hash": hash, "user_sub": user.Sub,
 		"request": req.Fields, "prices": jobPrices,
 	})
 	if _, err := s.Queue.SendMessage(ctx, &sqs.SendMessageInput{
@@ -239,11 +240,14 @@ func (s *Server) checkUpload(ctx context.Context, key, sum string) (string, erro
 	if err != nil {
 		return "", err
 	}
+	if len(data) > prices.MaxBytes {
+		return "The file is larger than 5 MB.", nil
+	}
 	got := sha256.Sum256(data)
 	if hex.EncodeToString(got[:]) != sum {
 		return "The uploaded file does not match its sha256; upload it again.", nil
 	}
-	if err := prices.Check(data); err != nil {
+	if err := prices.CheckPLD(data); err != nil {
 		return err.Error(), nil
 	}
 	return "", nil

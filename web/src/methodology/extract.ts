@@ -1,23 +1,12 @@
 // Picks the site's methodology out of docs/model/model.md, which stays the one
-// source: §1 to §6 of the deterministic model, without the bisection method,
-// the solver tuning notes, or anything about the stochastic model.
+// source: §1 to §6 of the model and the investment layer of §8, without the
+// pointer to the typeset PDF.
 
 /** Top-level sections kept, by their hand-written number ("## 4. Constraints"). */
-export const KEPT_SECTIONS = [1, 2, 3, 4, 5, 6];
+export const KEPT_SECTIONS = [1, 2, 3, 4, 5, 6, 8];
 
-/** A paragraph mentioning any of these is about material the site leaves out, and goes whole. */
-export const DROPPED_BLOCKS: RegExp[] = [/\bbisection\b/i, /\bbissection\b/i, /\bstochastic\b/i];
-
-/**
- * Links to documents the site leaves out. The sentence (or, for `parenthetical`,
- * the bracketed aside) carrying one is removed rather than the paragraph, which
- * usually still says something the model needs.
- */
-export const DROPPED_LINKS: { target: RegExp; scope: "sentence" | "parenthetical" }[] = [
-  { target: /model-stochastic\.md/, scope: "sentence" },
-  { target: /battery-dispatch\.pdf/, scope: "sentence" },
-  { target: /solver-parameter-tunning\.md/, scope: "parenthetical" },
-];
+/** Links to documents the site leaves out. The sentence carrying one is removed, not its paragraph. */
+export const DROPPED_LINKS: RegExp[] = [/battery-dispatch\.pdf/];
 
 export interface Heading {
   level: 2 | 3;
@@ -85,42 +74,12 @@ function removeSentence(block: string, index: number, length: number): string {
   return (head + tail).replace(/[ \t]+\n/g, "\n").trim();
 }
 
-function removeParenthetical(block: string, index: number): string | null {
-  let depth = 0;
-  let open = -1;
-  for (let i = index - 1; i >= 0; i--) {
-    const ch = block[i];
-    if (ch === ")") depth++;
-    else if (ch === "(") {
-      if (depth === 0) {
-        open = i;
-        break;
-      }
-      depth--;
-    }
-  }
-  if (open < 0) return null;
-  depth = 0;
-  for (let i = open; i < block.length; i++) {
-    const ch = block[i];
-    if (ch === "(") depth++;
-    else if (ch === ")") {
-      depth--;
-      if (depth === 0) {
-        const head = block.slice(0, open).replace(/[ \t]+$/, "");
-        return (head + block.slice(i + 1)).trim();
-      }
-    }
-  }
-  return null;
-}
-
-/** Removes every sentence or aside that links to a dropped document; "" when nothing is left. */
+/** Removes every sentence that links to a dropped document; "" when nothing is left. */
 export function stripDroppedLinks(block: string): string {
   let text = block;
-  for (const rule of DROPPED_LINKS) {
+  for (const target of DROPPED_LINKS) {
     for (let guard = 0; guard < 20; guard++) {
-      const match = rule.target.exec(text);
+      const match = target.exec(text);
       if (!match) break;
       // Widen the match to the whole markdown link it sits in, when it does.
       const link = /\[[^\]]*\]\([^)]*\)/g;
@@ -134,9 +93,7 @@ export function stripDroppedLinks(block: string): string {
           break;
         }
       }
-      const next =
-        (rule.scope === "parenthetical" ? removeParenthetical(text, start) : null) ??
-        removeSentence(text, start, length);
+      const next = removeSentence(text, start, length);
       if (next === text) break;
       text = next;
     }
@@ -166,10 +123,8 @@ export function extractMethodology(markdown: string, options: ExtractOptions = {
   for (const section of kept) {
     for (const block of blocks(section.body)) {
       if (block.trim() === "" || /^-{3,}\s*$/.test(block.trim())) continue;
-      // Links first: a sentence pointing at model-stochastic.md goes, its paragraph stays.
       const stripped = stripDroppedLinks(block);
       if (stripped.trim() === "") continue;
-      if (DROPPED_BLOCKS.some((pattern) => pattern.test(stripped))) continue;
       parts.push(rewriteLinks(stripped, options));
     }
   }

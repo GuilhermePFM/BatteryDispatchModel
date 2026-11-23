@@ -7,5 +7,6 @@ DATA_DIR = PROJECT_ROOT / "data"
 RAW_DATA_DIR = DATA_DIR / "raw"
 RESULTS_DIR = DATA_DIR / "results"
 
-BATTERY_SPEC_XLSX = RAW_DATA_DIR / "attachment_1_battery_spec.xlsx"
-MARKET_PRICES_XLSX = RAW_DATA_DIR / "attachment_2_market_prices.xlsx"
+#: The CCEE hourly PLD exports as downloaded, and the canonical file built from them.
+CCEE_RAW_DIR = RAW_DATA_DIR / "ccee"
+PLD_HOURLY_CSV = RAW_DATA_DIR / "pld_hourly.csv"

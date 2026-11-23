@@ -1,15 +1,14 @@
-title: Battery dispatch model
-subtitle: A mixed-integer formulation for storage trading across two wholesale markets
+title: Battery dispatch and investment model
+subtitle: Storage in Brazil's hourly PLD market, contracted and merchant
 author: Guilherme Machado
 abstract: |
-  Formulation of the battery dispatch problem for the Aurora second-round
-  technical exercise: a 2 MW / 4 MWh battery trading across two wholesale
-  electricity markets over 2018--2020 as a price taker. The problem is posed
-  as a mixed-integer linear program on a common half-hourly axis, with
-  round-trip losses, a charge/discharge complementarity condition, an hourly
-  commitment for the second market, a cycle-life budget and
-  throughput-driven degradation of the usable volume. The horizon is solved
-  by a rolling window decomposition, with the one constraint that couples
-  distant windows --- the cycle budget --- priced by a Lagrangian relaxation
-  minimised with Kelley's cutting-plane method.
+  A model for valuing a battery in one of Brazil's four submarkets under
+  two separate business cases: a capacity contract from the 2026 LRCAP storage
+  auction, and merchant arbitrage against the hourly PLD. The dispatch is one
+  linear program per submarket and case over the whole horizon. The contracted
+  case adds the CRCAP limits on daily and rolling yearly cycles and a binary
+  for the 12 hours of daily injection, solved only when the linear relaxation
+  breaks that limit. An investment layer turns each solution into nominal cash
+  flows with IPCA indexation, a nominal discount rate and real PLD growth, and
+  reports NPV, IRR, payback, maximum viable capex and minimum viable bid.
 promote-title: true

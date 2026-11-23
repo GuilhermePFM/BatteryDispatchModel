@@ -1,6 +1,5 @@
-// The palette of scripts/plot_cutting_plane.py and the notebooks, so the site's
-// charts and the documents' figures are one set: blue is Market 1 and
-// charging, orange Market 2 and delivering. Dark steps validated separately
+// The site's charts share one palette: blue is charging, orange is delivering.
+// Dark steps validated separately
 // (the dataviz validator: lightness band, CVD separation, contrast).
 import { useSyncExternalStore } from "react";
 

@@ -5,6 +5,12 @@ beyond the JSON Schemas: storage layout, HTTP routes, configuration, and the
 local stack. The schemas in this folder stay the source of truth for payload
 shapes; this note fixes everything around them.
 
+Payloads are version 2, in [`v2/`](v2/). Each result stays at or below 300 KB,
+and a message of another version or model fails with `request_invalid` and
+returns the quota. A run spans 365 to 731 days, up to 2,000 MW and 60,000 MWh.
+`plans/<run_id>.csv` holds all the cases in one long file:
+`hora,submercado,caso,pld_brl_mwh,charge_mw,discharge_mw,storage_mwh`.
+
 ## Configuration
 
 Every service reads the same environment variable names. Both AWS SDKs honour
@@ -107,9 +113,9 @@ prefixes after 7 days.
   whose policy limits `content-length-range` to 5 MB and fixes the key.
 - `plans/<run_id>.csv`: written by the solver.
 
-The precomputed 2018–2020 scenario is not in this bucket: it is a static file
-of the site, `web/public/scenarios/full-2018-2020.json`, holding a run-record
-with status `succeeded` and the `result` object inline.
+The precomputed scenario is not in this bucket: it is a static file of the
+site, `web/public/scenarios/pld-2025-2026.json`, holding a v2 result written by
+`scripts/build_scenario_v2.py`.
 
 ## HTTP API
 

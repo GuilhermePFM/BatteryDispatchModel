@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://batteryplan.invalid/contracts/v2/run-record.schema.json",
+  "title": "Run record, version 2",
+  "description": "A run as stored in DynamoDB and returned by GET /api/runs/{run_id}. The result is stored as the string attribute result_json and parsed back by the API.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "run_id", "user_sub", "params_hash", "status", "request", "created_at", "updated_at"],
+  "properties": {
+    "version": {
+      "const": 2
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "user_sub": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "params_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "status": {
+      "enum": ["queued", "running", "succeeded", "failed"]
+    },
+    "request": {
+      "$ref": "run-request.schema.json"
+    },
+    "created_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "updated_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "started_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "finished_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "progress": {
+      "$ref": "#/$defs/progress"
+    },
+    "error": {
+      "description": "Why the run failed, written for the user.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "description": "prices_invalid: the price file was rejected; request_invalid: the request does not fit the prices or this contract version; solver_failed: anything else.",
+          "enum": ["prices_invalid", "request_invalid", "solver_failed"]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      }
+    },
+    "result": {
+      "$ref": "result.schema.json"
+    },
+    "plan_csv_key": {
+      "description": "S3 key of the hourly plan CSV, one row per hour, submarket and case.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "plan_csv_url": {
+      "description": "API response only, never stored: a presigned GET of plan_csv_key, valid 1 h.",
+      "type": "string",
+      "format": "uri"
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "running"}}},
+      "then": {"required": ["started_at"]}
+    },
+    {
+      "if": {"properties": {"status": {"const": "succeeded"}}},
+      "then": {"required": ["started_at", "finished_at", "result", "plan_csv_key"]}
+    },
+    {
+      "if": {"properties": {"status": {"const": "failed"}}},
+      "then": {"required": ["finished_at", "error"]}
+    }
+  ],
+  "$defs": {
+    "timestamp": {
+      "description": "UTC, RFC 3339, e.g. 2026-11-18T09:30:00Z.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "progress": {
+      "description": "How far the eight programs have got, plus when it was written.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["phase", "cases_done", "cases_total", "submarket", "case", "fraction", "elapsed", "done", "updated_at"],
+      "properties": {
+        "phase": {
+          "enum": ["solving", "done"]
+        },
+        "cases_done": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8
+        },
+        "cases_total": {
+          "description": "8, or 4 when the battery cannot meet the contract and only the merchant case runs.",
+          "type": "integer",
+          "minimum": 4,
+          "maximum": 8
+        },
+        "submarket": {
+          "description": "The submarket in flight; null once done.",
+          "enum": ["SE", "S", "NE", "N", null]
+        },
+        "case": {
+          "description": "The business case in flight; null once done.",
+          "enum": ["contracted", "merchant", null]
+        },
+        "fraction": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "elapsed": {
+          "description": "Seconds since the solve started.",
+          "type": "number",
+          "minimum": 0
+        },
+        "done": {
+          "type": "boolean"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/timestamp"
+        }
+      }
+    }
+  }
+}
