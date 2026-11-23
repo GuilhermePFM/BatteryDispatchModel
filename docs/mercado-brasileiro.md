@@ -65,10 +65,13 @@ e atualiza as séries no início de cada mês.
 
 | Arquivo | Período real |
 | --- | --- |
-| `preco_horario-01.25-06.25.csv` | 20/01/2025 a 20/06/2025 |
-| `preco_horario-6.25-12.25.csv` | 20/06/2025 a 20/12/2025 |
-| `preco_horario-12.25-06.26.csv` | 20/12/2025 a 20/06/2026 |
-| `preco_horario-5.26-11.26.csv` | 20/06/2026 a 20/11/2026 (o nome diz "5.26") |
+| `pld_horario_2025-01-20_2025-06-20.csv` | 20/01/2025 a 20/06/2025 |
+| `pld_horario_2025-06-20_2025-12-20.csv` | 20/06/2025 a 20/12/2025 |
+| `pld_horario_2025-12-20_2026-06-20.csv` | 20/12/2025 a 20/06/2026 |
+| `pld_horario_2026-06-20_2026-11-20.csv` | 20/06/2026 a 20/11/2026 |
+
+A pasta também guarda as exportações de 17/04/2018 a 19/01/2025, que ficam fora da base
+canônica do modelo.
 
 **Formato:** CSV ASCII com `;` e decimal com vírgula. É uma tabela larga, com colunas
 `Hora` (0 a 23), `Submercado` e uma coluna por dia em `d/m/aaaa`. Cada arquivo tem 96

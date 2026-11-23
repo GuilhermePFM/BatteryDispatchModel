@@ -117,6 +117,19 @@ export const CYCLE_BUDGET_FIELD: FieldSpec = {
   step: "1",
 };
 
+/** The horizon in days, inclusive of both dates. It moves the start date and is not sent. */
+export const HORIZON_FIELD: FieldSpec = {
+  key: "horizon_days",
+  label: "Simulation horizon",
+  unit: "days",
+  min: MIN_SPAN_DAYS + 1,
+  max: MAX_SPAN_DAYS + 1,
+  integer: true,
+  default: MIN_SPAN_DAYS + 1,
+  description: "Days up to the end date, both included. Changing it moves the start date.",
+  step: "1",
+};
+
 /** Every input as the text the user typed, so a half-typed number is not lost. */
 export interface FormValues {
   battery: Record<BatteryKey, string>;
@@ -127,7 +140,8 @@ export interface FormValues {
 
 export type FormErrors = Partial<Record<string, string>>;
 
-export const DEFAULT_START = BUNDLED_START;
+/** The precomputed run: the last full year of the bundled prices. */
+export const DEFAULT_START = "2025-11-21";
 export const DEFAULT_END = BUNDLED_END;
 
 export function defaultValues(): FormValues {
@@ -197,6 +211,12 @@ export function parseDay(text: string): number | null {
 
 export function dayToIso(day: number): string {
   return new Date(day * 86_400_000).toISOString().slice(0, 10);
+}
+
+/** The start of a horizon of `days` ending on a valid end, inclusive, else null. */
+export function startForHorizon(end: string, days: number): string | null {
+  const last = parseDay(end);
+  return last === null ? null : dayToIso(last - days + 1);
 }
 
 /** What an uploaded file is known to cover, read in the browser. */
