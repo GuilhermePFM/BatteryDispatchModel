@@ -6,13 +6,15 @@ import { week } from "../charts/options";
 import { usePalette } from "../charts/theme";
 import { CONTRACT_VERSION, MODEL_VERSION, type Result, type RunRecord } from "../contracts/types";
 import { Dashboard } from "../dashboard/Dashboard";
+import { useI18n } from "../i18n";
+import { Rich } from "../i18n/Rich";
 import { scenarioUrl } from "../lib/config";
 import { brl, day, num, pct } from "../lib/format";
 
 type Scenario =
   | { state: "loading" }
   | { state: "ready"; result: Result; example: boolean }
-  | { state: "missing"; reason: string };
+  | { state: "missing" };
 
 /** Accepts a run-record with the result inline, or a bare result, of the current model only. */
 function resultOf(payload: unknown): Result | null {
@@ -39,17 +41,21 @@ async function loadScenario(): Promise<Scenario> {
     const result = resultOf(example.default);
     if (result) return { state: "ready", result, example: true };
   }
-  return { state: "missing", reason: "The precomputed PLD scenario could not be loaded." };
+  return { state: "missing" };
 }
 
 function HeroChart({ result }: { result: Result | null }) {
+  const { locale, t } = useI18n();
   const palette = usePalette();
-  const option = useMemo(() => (result ? week(result, palette, true) : null), [result, palette]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- what it builds reads the active language
+  const option = useMemo(() => (result ? week(result, palette, true) : null), [result, palette, locale]);
   if (!option) return <div className="chart-placeholder" style={{ height: 300 }} aria-hidden="true" />;
-  return <Chart option={option} height={300} label="The PLD and the battery's power over a representative week" />;
+  return <Chart option={option} height={300} label={t.home.heroChart} />;
 }
 
 export function Home() {
+  const { t: all } = useI18n();
+  const t = all.home;
   const [scenario, setScenario] = useState<Scenario>({ state: "loading" });
   useEffect(() => {
     let live = true;
@@ -67,23 +73,21 @@ export function Home() {
       <section className="hero">
         <div className="wrap">
           <div className="reveal">
-            <h1>Is this battery worth buying in Brazil?</h1>
-            <p className="hero-sub">
-              Where to put it, and whether to contract it in the capacity auction or run it merchant on the hourly PLD. Change the financial case and see the answer move at once.
-            </p>
+            <h1>{t.title}</h1>
+            <p className="hero-sub">{t.sub}</p>
             <div className="hero-ctas">
               <Link className="btn btn-primary" to="/run">
-                Run your own <ArrowRight size={16} weight="bold" aria-hidden="true" />
+                {t.runOwn} <ArrowRight size={16} weight="bold" aria-hidden="true" />
               </Link>
               <Link className="btn btn-secondary" to="/methodology">
-                Read the method
+                {t.readMethod}
               </Link>
             </div>
           </div>
           <div className="hero-visual reveal reveal-2">
             <div className="hero-visual-caption">
-              <span>The PLD, and what the battery did with it</span>
-              <span className="num">{w.length ? `${day(w[0])} to ${day(w[w.length - 1])}` : ""}</span>
+              <span>{t.heroCaption}</span>
+              <span className="num">{w.length ? all.common.range(day(w[0]), day(w[w.length - 1])) : ""}</span>
             </div>
             <HeroChart result={result} />
           </div>
@@ -93,40 +97,44 @@ export function Home() {
       <section className="intro">
         <div className="wrap">
           <div className="intro-text">
+            <p>{t.intro1}</p>
             <p>
-              A battery in Brazil can earn in two separate ways. Under a capacity contract (LRCAP) it is paid a fixed revenue, indexed by IPCA, and the ONS dispatches it: the PLD settlement belongs to the CONCAP, so arbitrage is no income. As a merchant asset it earns the difference between hours of the PLD and has no fixed revenue.
-            </p>
-            <p>
-              The solver plans every hour of every submarket for both cases. The investment layer then turns those plans into cash flows, NPV, IRR, payback, the highest capex that still pays and the lowest bid that does. The <Link to="/methodology">methodology</Link> has the formulation, and you can <Link to="/run">run your own battery</Link>.
+              <Rich
+                text={t.intro2}
+                tags={{
+                  method: (text) => <Link to="/methodology">{text}</Link>,
+                  run: (text) => <Link to="/run">{text}</Link>,
+                }}
+              />
             </p>
           </div>
           {result ? (
             <dl className="spec">
               <div>
-                <dt>Horizon</dt>
-                <dd>{num(result.horizon.days)} days</dd>
+                <dt>{t.horizon}</dt>
+                <dd>{t.days(num(result.horizon.days))}</dd>
               </div>
               <div>
-                <dt>Decisions</dt>
-                <dd>{num(result.horizon.hours)} hours</dd>
+                <dt>{t.decisions}</dt>
+                <dd>{t.hours(num(result.horizon.hours))}</dd>
               </div>
               <div>
-                <dt>Battery</dt>
+                <dt>{t.battery}</dt>
                 <dd>
                   {num(result.battery.power_mw, 0)} MW / {num(result.battery.duration_hours, 0)} h
                 </dd>
               </div>
               <div>
-                <dt>Round trip</dt>
+                <dt>{t.roundTrip}</dt>
                 <dd>{pct(result.battery.round_trip_efficiency, 0)}</dd>
               </div>
               <div>
-                <dt>Best submarket</dt>
-                <dd>{best?.submarket ?? "n/a"}</dd>
+                <dt>{t.bestSubmarket}</dt>
+                <dd>{best?.submarket ?? all.common.na}</dd>
               </div>
               <div>
-                <dt>Merchant ceiling</dt>
-                <dd>{brl(best?.balanced_year_brl)} / year</dd>
+                <dt>{t.merchantCeiling}</dt>
+                <dd>{t.perYear(brl(best?.balanced_year_brl))}</dd>
               </div>
             </dl>
           ) : null}
@@ -136,28 +144,25 @@ export function Home() {
       <section className="dashboard" aria-labelledby="scenario-title">
         <div className="wrap">
           <div className="dash-head">
-            <h2 id="scenario-title">The hourly PLD, the precomputed run</h2>
+            <h2 id="scenario-title">{t.scenarioTitle}</h2>
             {result ? (
-              <span className="dash-meta">
-                {day(result.horizon.start)} to {day(result.horizon.end)}, four submarkets, contracted and merchant
-              </span>
+              <span className="dash-meta">{t.scenarioMeta(day(result.horizon.start), day(result.horizon.end))}</span>
             ) : null}
           </div>
           {scenario.state === "ready" && scenario.example ? (
             <div className="banner" style={{ marginBottom: 20 }}>
               <Info size={18} aria-hidden="true" />
-              <span>
-                Development build: the scenario file is missing, so this shows the contract&apos;s example payload instead.
-              </span>
+              <span>{t.devExample}</span>
             </div>
           ) : null}
           {scenario.state === "loading" ? (
-            <div className="chart-placeholder" style={{ height: 240, borderRadius: 14 }} aria-label="Loading the scenario" />
+            <div className="chart-placeholder" style={{ height: 240, borderRadius: 14 }} aria-label={t.loading} />
           ) : scenario.state === "missing" ? (
             <div className="banner error" role="alert">
               <WarningCircle size={18} aria-hidden="true" />
               <span>
-                <span className="banner-title">{scenario.reason}</span> Reload the page, or <Link to="/run">run a horizon yourself</Link>.
+                <span className="banner-title">{t.scenarioMissing}</span>
+                <Rich text={t.reload} tags={{ run: (text) => <Link to="/run">{text}</Link> }} />
               </span>
             </div>
           ) : (

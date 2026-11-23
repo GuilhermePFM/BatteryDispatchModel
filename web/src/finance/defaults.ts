@@ -2,6 +2,8 @@
 // provenance. model.md §8.1: anything without a contract or measured source is
 // an editable assumption and is labelled so.
 import type { Submarket } from "../contracts/types";
+import { intlLocale, messages } from "../i18n";
+import { isDecimal, looksGrouped, toNumber } from "../lib/decimal";
 import { capexIndexYears, type FinanceInputs } from "./model";
 
 export type Product = "A" | "B";
@@ -10,11 +12,6 @@ export type Provenance = "contract" | "client" | "measured" | "assumption";
 
 /** Opening prices, BRL/MW-year at May 2026 (Editais 5/2026 and 6/2026, item 10.5.1). */
 export const OPENING_PRICE: Record<Product, number> = { A: 1_760_000, B: 1_580_000 };
-
-export const PRODUCT_LABEL: Record<Product, string> = {
-  A: "Product A (Leilão 5/2026, national content)",
-  B: "Product B (Leilão 6/2026)",
-};
 
 /** Edital item 11.8.2.6.2: the base of the consortium net-worth test, offered as a starting point only. */
 export const CAPEX_REFERENCE_PER_MW = 6_000_000;
@@ -74,28 +71,46 @@ export type FinanceKey =
 
 export type FinanceForm = Record<FinanceKey, string>;
 
-export const MACRO_FIELDS: FinanceField[] = [
-  { key: "ipca", label: "IPCA", unit: "% / year", min: -2, max: 30, provenance: "assumption", help: "Indexes the fixed revenue, opex, replacement and the PLD." },
-  { key: "discountRate", label: "Nominal discount rate", unit: "% / year", min: 0, max: 60, provenance: "client", help: "Your hurdle rate or WACC." },
-  { key: "realPldGrowth", label: "Real PLD growth", unit: "% / year", min: -20, max: 20, provenance: "assumption", help: "Above IPCA. Applies to merchant revenue and to the reimbursement." },
+type FinanceBounds = Omit<FinanceField, "label" | "unit" | "help">;
+
+/** A field whose texts are read from the active language each time they are shown. */
+function localized(spec: FinanceBounds): FinanceField {
+  const text = () => messages().finance.fields[spec.key];
+  return Object.defineProperties(spec, {
+    label: { get: () => text().label, enumerable: true },
+    unit: { get: () => text().unit, enumerable: true },
+    help: { get: () => text().help, enumerable: true },
+  }) as FinanceField;
+}
+
+const MACRO_BOUNDS: FinanceBounds[] = [
+  { key: "ipca", min: -2, max: 30, provenance: "assumption" },
+  { key: "discountRate", min: 0, max: 60, provenance: "client" },
+  { key: "realPldGrowth", min: -20, max: 20, provenance: "assumption" },
 ];
 
-export const INVESTMENT_FIELDS: FinanceField[] = [
-  { key: "bid", label: "Fixed revenue bid", unit: "BRL / MW-year", min: 0, max: 10_000_000, provenance: "contract", help: "At the May 2026 base. Starts at the product's opening price (item 10.5.1)." },
-  { key: "capexPerMw", label: "Capex", unit: "BRL / MW", min: 0, max: 100_000_000, provenance: "assumption", help: "In BRL of the month the model was run, indexed by IPCA to the payment in August 2028. Starts at the BRL 6.0 million per MW of Edital item 11.8.2.6.2, which is a net-worth test base and not a cost reference." },
-  { key: "opexPerMw", label: "Fixed opex", unit: "BRL / MW-year", min: 0, max: 20_000_000, provenance: "assumption", help: "At the May 2026 base." },
-  { key: "replacementShare", label: "Replacement cost", unit: "% of capex", min: 0, max: 300, provenance: "assumption", help: "The whole volume, as a share of the capex paid in August 2028, indexed by IPCA from then. The contracted case pays only for the share it adds." },
-  { key: "calendarFade", label: "Calendar fade", unit: "% / year", min: 0, max: 30, provenance: "assumption", help: "Capacity lost with time, on top of cycling." },
-  { key: "merchantReplaceEvery", label: "Merchant replacement interval", unit: "years", min: 1, max: 15, integer: true, optional: true, provenance: "assumption", help: "Empty: never replaced. The contracted case adds modules when it must." },
-  { key: "captureFactor", label: "Capture factor", unit: "fraction", min: 0, max: 1, optional: true, provenance: "measured", help: "Empty: the 24+0 backtest for each submarket and duration, itself an upper bound." },
+export const MACRO_FIELDS = MACRO_BOUNDS.map((spec) => localized(spec));
+
+const INVESTMENT_BOUNDS: FinanceBounds[] = [
+  { key: "bid", min: 0, max: 10_000_000, provenance: "contract" },
+  { key: "capexPerMw", min: 0, max: 100_000_000, provenance: "assumption" },
+  { key: "opexPerMw", min: 0, max: 20_000_000, provenance: "assumption" },
+  { key: "replacementShare", min: 0, max: 300, provenance: "assumption" },
+  { key: "calendarFade", min: 0, max: 30, provenance: "assumption" },
+  { key: "merchantReplaceEvery", min: 1, max: 15, integer: true, optional: true, provenance: "assumption" },
+  { key: "captureFactor", min: 0, max: 1, optional: true, provenance: "measured" },
 ];
 
-export const TAX_FIELDS: FinanceField[] = [
-  { key: "revenueTax", label: "Tax on revenue", unit: "%", min: 0, max: 99, provenance: "assumption", help: "Applied to gross revenue." },
-  { key: "incomeTax", label: "Tax on income", unit: "%", min: 0, max: 99, provenance: "assumption", help: "With losses carried forward, with no statutory limit." },
-  { key: "depreciationYears", label: "Tax depreciation", unit: "years", min: 1, max: 40, integer: true, provenance: "assumption", help: "Straight line on amounts paid, not indexed." },
-  { key: "penaltyAllowance", label: "Penalty allowance", unit: "BRL / year", min: 0, max: 1_000_000_000, provenance: "assumption", help: "Contracted case only." },
+export const INVESTMENT_FIELDS = INVESTMENT_BOUNDS.map((spec) => localized(spec));
+
+const TAX_BOUNDS: FinanceBounds[] = [
+  { key: "revenueTax", min: 0, max: 99, provenance: "assumption" },
+  { key: "incomeTax", min: 0, max: 99, provenance: "assumption" },
+  { key: "depreciationYears", min: 1, max: 40, integer: true, provenance: "assumption" },
+  { key: "penaltyAllowance", min: 0, max: 1_000_000_000, provenance: "assumption" },
 ];
+
+export const TAX_FIELDS = TAX_BOUNDS.map((spec) => localized(spec));
 
 export const FINANCE_FIELDS = [...MACRO_FIELDS, ...INVESTMENT_FIELDS, ...TAX_FIELDS];
 
@@ -122,21 +137,26 @@ export function defaultForm(product: Product = "A"): FinanceForm {
 export type FinanceErrors = Partial<Record<FinanceKey, string>>;
 
 export function validateForm(form: FinanceForm): FinanceErrors {
+  const t = messages().validation;
   const errors: FinanceErrors = {};
   for (const field of FINANCE_FIELDS) {
     const text = form[field.key].trim();
     if (text === "") {
-      if (!field.optional) errors[field.key] = "Required.";
+      if (!field.optional) errors[field.key] = t.required;
       continue;
     }
-    if (!/^-?(\d+\.?\d*|\.\d+)$/.test(text)) {
-      errors[field.key] = "Enter a number.";
+    if (!isDecimal(text)) {
+      errors[field.key] = t.enterNumber;
       continue;
     }
-    const value = Number(text);
-    if (field.integer && !Number.isInteger(value)) errors[field.key] = "Enter a whole number.";
-    else if (value < field.min) errors[field.key] = `At least ${field.min.toLocaleString("en-US")}.`;
-    else if (value > field.max) errors[field.key] = `At most ${field.max.toLocaleString("en-US")}.`;
+    if (looksGrouped(text)) {
+      errors[field.key] = t.groupedNumber;
+      continue;
+    }
+    const value = toNumber(text);
+    if (field.integer && !Number.isInteger(value)) errors[field.key] = t.wholeNumber;
+    else if (value < field.min) errors[field.key] = t.atLeast(field.min.toLocaleString(intlLocale()));
+    else if (value > field.max) errors[field.key] = t.atMost(field.max.toLocaleString(intlLocale()));
   }
   return errors;
 }
@@ -151,12 +171,12 @@ export function replacementYears(interval: number | null): number[] {
 
 /** The engine's inputs for a valid form. The capture factor is set per submarket. */
 export function toInputs(form: FinanceForm, powerMw: number, runMonth: string = BUNDLED_RUN_MONTH): { inputs: FinanceInputs; captureOverride: number | null } {
-  const n = (key: FinanceKey) => Number(form[key].trim());
+  const n = (key: FinanceKey) => toNumber(form[key]);
   const percent = (key: FinanceKey) => n(key) / 100;
   const every = form.merchantReplaceEvery.trim();
   const capture = form.captureFactor.trim();
   return {
-    captureOverride: capture === "" ? null : Number(capture),
+    captureOverride: capture === "" ? null : toNumber(capture),
     inputs: {
       fixedRevenue: n("bid"),
       ipca: percent("ipca"),
@@ -172,7 +192,7 @@ export function toInputs(form: FinanceForm, powerMw: number, runMonth: string = 
       calendarFade: percent("calendarFade"),
       replacementShare: percent("replacementShare"),
       penaltyAllowance: n("penaltyAllowance"),
-      merchantReplacementYears: replacementYears(every === "" ? null : Number(every)),
+      merchantReplacementYears: replacementYears(every === "" ? null : toNumber(every)),
     },
   };
 }

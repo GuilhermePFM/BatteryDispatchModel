@@ -1,9 +1,12 @@
-// docs/model/model.md is the single source: it is imported raw at build time,
-// cut down to the model and investment layer (§1 to §6 and §8, see methodology/extract.ts)
-// and rendered with KaTeX here.
+// docs/model/model.md and its translation model.pt.md are imported raw at build
+// time, cut down to the model and investment layer (§1 to §6 and §8, see
+// methodology/extract.ts) and rendered with KaTeX here.
 import "katex/dist/katex.min.css";
 import { useEffect, useMemo, useState } from "react";
 import modelMarkdown from "../../../docs/model/model.md?raw";
+import modelMarkdownPt from "../../../docs/model/model.pt.md?raw";
+import { useI18n } from "../i18n";
+import { Rich } from "../i18n/Rich";
 import { repoUrl } from "../lib/config";
 import { extractMethodology } from "../methodology/extract";
 import { renderMarkdown } from "../methodology/render";
@@ -37,10 +40,18 @@ function useCurrentHeading(ids: string[]): string | null {
 }
 
 export default function Methodology() {
+  const { locale, t: all } = useI18n();
+  const t = all.methodology;
   const { html, headings } = useMemo(() => {
-    const extracted = extractMethodology(modelMarkdown, { repoDocsUrl: repoUrl, resolveImage });
-    return { html: renderMarkdown(extracted.markdown), headings: extracted.headings };
-  }, []);
+    const options = { repoDocsUrl: repoUrl, resolveImage };
+    // Anchors are the English ones in both languages, so a link keeps working in either.
+    const anchors = extractMethodology(modelMarkdown, options).headings.map((h) => h.id);
+    const extracted = extractMethodology(locale === "pt" ? modelMarkdownPt : modelMarkdown, options);
+    return {
+      html: renderMarkdown(extracted.markdown, anchors),
+      headings: extracted.headings.map((h, i) => ({ ...h, id: anchors[i] })),
+    };
+  }, [locale]);
   const ids = useMemo(() => headings.map((h) => h.id), [headings]);
   const current = useCurrentHeading(ids);
 
@@ -54,14 +65,13 @@ export default function Methodology() {
     <div className="page">
       <div className="wrap">
         <div className="page-head">
-          <h1>Methodology</h1>
+          <h1>{t.title}</h1>
           <p>
-            The optimisation model behind every plan on this site: what is decided, what constrains it, and how the investment is valued. This page is
-            rendered from <a href={`${repoUrl}/docs/model/model.md`}>docs/model/model.md</a> in the repository.
+            <Rich text={t.lede} tags={{ source: (text) => <a href={`${repoUrl}/docs/model/${t.source}`}>{text}</a> }} />
           </p>
         </div>
         <div className="doc-layout">
-          <nav className="doc-toc" aria-label="On this page">
+          <nav className="doc-toc" aria-label={t.toc}>
             <ol>
               {headings.map((h) => (
                 <li key={h.id} className={h.level === 3 ? "l3" : undefined}>

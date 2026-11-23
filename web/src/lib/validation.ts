@@ -4,6 +4,8 @@
 // physical request from it.
 import schema from "../../../contracts/v2/run-request.schema.json";
 import type { BatteryRequest, RunRequest } from "../contracts/types";
+import { intlLocale, messages } from "../i18n";
+import { isDecimal, looksGrouped, toNumber } from "./decimal";
 import { checkPldCsv } from "./pld";
 
 export const BUNDLED_START = "2025-01-20";
@@ -49,101 +51,91 @@ export type BatteryKey = "power_mw" | "duration_hours" | "round_trip_efficiency"
 /** Each one-way efficiency is at least the schema's minimum, so the round trip is at least its square. */
 const MIN_ROUND_TRIP = batteryProps.charge_efficiency.minimum * batteryProps.discharge_efficiency.minimum;
 
-export const BATTERY_FIELDS: FieldSpec[] = [
+type FieldBounds = Omit<FieldSpec, "label" | "unit" | "description">;
+
+/** A field whose texts are read from the active language each time they are shown. */
+function localized(spec: FieldBounds): FieldSpec {
+  const text = () => messages().fields[spec.key as keyof ReturnType<typeof messages>["fields"]];
+  return Object.defineProperties(spec, {
+    label: { get: () => text().label, enumerable: true },
+    unit: { get: () => text().unit, enumerable: true },
+    description: { get: () => text().description, enumerable: true },
+  }) as FieldSpec;
+}
+
+const BATTERY_BOUNDS: FieldBounds[] = [
   {
     key: "power_mw",
-    label: "Power delivered",
-    unit: "MW",
     min: batteryProps.power_mw.minimum,
     max: batteryProps.power_mw.maximum,
     integer: false,
     default: batteryProps.power_mw.default,
-    description: "Delivered to the grid. Under 30 MW the project cannot enter the auction.",
     step: "1",
   },
   {
     key: "duration_hours",
-    label: "Duration",
-    unit: "hours delivered",
     min: 0.25,
     max: 24,
     integer: false,
     default: 4,
-    description: "Hours at full power from a full store, after losses. The contract needs 4.",
     step: "0.5",
   },
   {
     key: "round_trip_efficiency",
-    label: "Round-trip efficiency",
-    unit: "fraction",
     min: MIN_ROUND_TRIP,
     max: 1,
     integer: false,
     default: 0.85,
-    description: "Energy back over energy in, split evenly between charging and discharging. The contract needs 0.85.",
     step: "0.01",
   },
   {
     key: "charge_rate_mw",
-    label: "Charge rate",
-    unit: "MW, from the grid",
     min: batteryProps.max_charge_mw.minimum,
     max: batteryProps.max_charge_mw.maximum,
     integer: false,
     default: undefined,
-    description: "Up to the power delivered. The contract needs the contracted 4 h back within 6 h.",
     step: "1",
     optional: true,
   },
   {
     key: "discharge_rate_mw",
-    label: "Discharge rate",
-    unit: "MW, to the grid",
     min: batteryProps.max_discharge_mw.minimum,
     max: batteryProps.max_discharge_mw.maximum,
     integer: false,
     default: undefined,
-    description: "Up to the power delivered. Below it, only the merchant case is solved.",
     step: "1",
     optional: true,
   },
   {
     key: "degradation_pct_per_cycle",
-    label: "Degradation",
-    unit: "% per cycle",
     min: batteryProps.degradation_pct_per_cycle.minimum,
     max: batteryProps.degradation_pct_per_cycle.maximum,
     integer: false,
     default: batteryProps.degradation_pct_per_cycle.default,
-    description: "Share of the nominal volume lost per full cycle.",
     step: "0.0005",
   },
 ];
 
-export const CYCLE_BUDGET_FIELD: FieldSpec = {
+export const BATTERY_FIELDS: FieldSpec[] = BATTERY_BOUNDS.map((spec) => localized(spec));
+
+export const CYCLE_BUDGET_FIELD: FieldSpec = localized({
   key: "cycle_budget",
-  label: "Cycle budget",
-  unit: "cycles",
   min: topProps.cycle_budget.minimum,
   max: topProps.cycle_budget.maximum,
   integer: false,
   default: undefined,
-  description: topProps.cycle_budget.description ?? "",
   step: "1",
-};
+});
 
 /** The horizon in days, inclusive of both dates. It moves the start date and is not sent. */
-export const HORIZON_FIELD: FieldSpec = {
+export const HORIZON_FIELD: FieldSpec = localized({
   key: "horizon_days",
-  label: "Simulation horizon",
-  unit: "days",
   min: MIN_SPAN_DAYS + 1,
   max: MAX_SPAN_DAYS + 1,
   integer: true,
   default: MIN_SPAN_DAYS + 1,
-  description: "Days up to the end date, both included. Changing it moves the start date.",
   step: "1",
-};
+});
 
 /** Every input as the text the user typed, so a half-typed number is not lost. */
 export interface FormValues {
@@ -197,20 +189,22 @@ export function valuesFromRequest(request: RunRequest): FormValues {
 
 /** Why a typed number is not acceptable for a field, or null when it is. */
 export function numberError(raw: string, field: FieldSpec, optional = false): string | null {
+  const t = messages().validation;
   const text = raw.trim();
-  if (text === "") return optional ? null : "Required.";
+  if (text === "") return optional ? null : t.required;
   // Number("") is 0 and Number("1e3") is 1000: accept only plain decimals.
-  if (!/^-?(\d+\.?\d*|\.\d+)$/.test(text)) return "Enter a number.";
-  const value = Number(text);
-  if (!Number.isFinite(value)) return "Enter a number.";
-  if (field.integer && !Number.isInteger(value)) return "Enter a whole number.";
-  if (value < field.min) return `At least ${formatBound(field.min)} ${field.unit}.`;
-  if (value > field.max) return `At most ${formatBound(field.max)} ${field.unit}.`;
+  if (!isDecimal(text)) return t.enterNumber;
+  if (looksGrouped(text)) return t.groupedNumber;
+  const value = toNumber(text);
+  if (!Number.isFinite(value)) return t.enterNumber;
+  if (field.integer && !Number.isInteger(value)) return t.wholeNumber;
+  if (value < field.min) return t.atLeast(formatBound(field.min), field.unit);
+  if (value > field.max) return t.atMost(formatBound(field.max), field.unit);
   return null;
 }
 
 function formatBound(value: number): string {
-  return value.toLocaleString("en-US", { maximumFractionDigits: 6 });
+  return value.toLocaleString(intlLocale(), { maximumFractionDigits: 6 });
 }
 
 const DATE_RE = /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/;
@@ -261,9 +255,9 @@ export function inspectPriceCsv(name: string, size: number, data: Uint8Array): P
 
 /** The physical request for typed values that are valid numbers (§2). */
 export function physicalBattery(values: FormValues): BatteryRequest {
-  const power = Number(values.battery.power_mw.trim());
-  const hours = Number(values.battery.duration_hours.trim());
-  const rte = Number(values.battery.round_trip_efficiency.trim());
+  const power = toNumber(values.battery.power_mw);
+  const hours = toNumber(values.battery.duration_hours);
+  const rte = toNumber(values.battery.round_trip_efficiency);
   const charge = values.battery.charge_rate_mw.trim();
   const discharge = values.battery.discharge_rate_mw.trim();
   const oneWay = Math.sqrt(rte);
@@ -271,17 +265,18 @@ export function physicalBattery(values: FormValues): BatteryRequest {
   return {
     power_mw: power,
     volume_mwh: volume,
-    max_charge_mw: charge === "" ? power : Number(charge),
+    max_charge_mw: charge === "" ? power : toNumber(charge),
     // The form states the rate at the grid; the request measures it in the store.
-    max_discharge_mw: (discharge === "" ? power : Number(discharge)) / oneWay,
+    max_discharge_mw: (discharge === "" ? power : toNumber(discharge)) / oneWay,
     charge_efficiency: oneWay,
     discharge_efficiency: oneWay,
-    degradation_pct_per_cycle: Number(values.battery.degradation_pct_per_cycle.trim()),
+    degradation_pct_per_cycle: toNumber(values.battery.degradation_pct_per_cycle),
   };
 }
 
 /** Every rule the API applies before queueing, per field; empty when the form can be sent. */
 export function validate(values: FormValues, file?: PriceFileInfo | null): FormErrors {
+  const t = messages().validation;
   const errors: FormErrors = {};
   for (const field of BATTERY_FIELDS) {
     const error = numberError(values.battery[field.key as BatteryKey], field, field.optional);
@@ -290,17 +285,17 @@ export function validate(values: FormValues, file?: PriceFileInfo | null): FormE
   if (!Object.keys(errors).length) {
     const b = physicalBattery(values);
     if (b.volume_mwh > batteryProps.volume_mwh.maximum) {
-      errors["battery.duration_hours"] = `This makes ${formatBound(b.volume_mwh)} MWh; the most is ${formatBound(batteryProps.volume_mwh.maximum)}.`;
+      errors["battery.duration_hours"] = t.volumeMost(formatBound(b.volume_mwh), formatBound(batteryProps.volume_mwh.maximum));
     } else if (b.volume_mwh < batteryProps.volume_mwh.minimum) {
-      errors["battery.duration_hours"] = `This makes ${formatBound(b.volume_mwh)} MWh; the least is ${formatBound(batteryProps.volume_mwh.minimum)}.`;
+      errors["battery.duration_hours"] = t.volumeLeast(formatBound(b.volume_mwh), formatBound(batteryProps.volume_mwh.minimum));
     }
     // Capex and opex scale with the power delivered, so a faster rate would come free.
     const mostPower = b.power_mw * (1 + 1e-9);
     if (b.max_charge_mw > mostPower) {
-      errors["battery.charge_rate_mw"] = `At most the power delivered, ${formatBound(b.power_mw)} MW.`;
+      errors["battery.charge_rate_mw"] = t.atMostPower(formatBound(b.power_mw));
     }
     if (b.max_discharge_mw * b.discharge_efficiency > mostPower) {
-      errors["battery.discharge_rate_mw"] = `At most the power delivered, ${formatBound(b.power_mw)} MW.`;
+      errors["battery.discharge_rate_mw"] = t.atMostPower(formatBound(b.power_mw));
     }
   }
   const budget = numberError(values.cycle_budget, CYCLE_BUDGET_FIELD, true);
@@ -308,14 +303,14 @@ export function validate(values: FormValues, file?: PriceFileInfo | null): FormE
 
   const start = parseDay(values.start);
   const end = parseDay(values.end);
-  if (start === null) errors.start = "Enter a date as YYYY-MM-DD.";
-  if (end === null) errors.end = "Enter a date as YYYY-MM-DD.";
+  if (start === null) errors.start = t.dateFormat;
+  if (end === null) errors.end = t.dateFormat;
   if (start !== null && end !== null) {
-    if (start > end) errors.end = "The end is before the start.";
+    if (start > end) errors.end = t.endBeforeStart;
     else if (end - start < MIN_SPAN_DAYS) {
-      errors.end = `At least a full year: ${dayToIso(start + MIN_SPAN_DAYS)} or later.`;
+      errors.end = t.fullYear(dayToIso(start + MIN_SPAN_DAYS));
     } else if (end - start > MAX_SPAN_DAYS) {
-      errors.end = `At most ${MAX_SPAN_DAYS} days after the start (${dayToIso(start + MAX_SPAN_DAYS)}).`;
+      errors.end = t.maxSpan(MAX_SPAN_DAYS, dayToIso(start + MAX_SPAN_DAYS));
     }
   }
 
@@ -325,16 +320,16 @@ export function validate(values: FormValues, file?: PriceFileInfo | null): FormE
     const first = file.firstDay ? parseDay(file.firstDay) : null;
     const last = file.lastDay ? parseDay(file.lastDay) : null;
     if (start !== null && first !== null && start < first) {
-      errors.start = `The file starts on ${file.firstDay}.`;
+      errors.start = t.fileStarts(file.firstDay);
     }
     if (end !== null && last !== null && end > last) {
-      errors.end = `The file ends on ${file.lastDay}.`;
+      errors.end = t.fileEnds(file.lastDay);
     }
   } else {
     const lo = parseDay(BUNDLED_START)!;
     const hi = parseDay(BUNDLED_END)!;
-    if (start !== null && start < lo) errors.start = `The bundled prices start on ${BUNDLED_START}.`;
-    if (end !== null && end > hi) errors.end = `The bundled prices end on ${BUNDLED_END}.`;
+    if (start !== null && start < lo) errors.start = t.bundledStarts(BUNDLED_START);
+    if (end !== null && end > hi) errors.end = t.bundledEnds(BUNDLED_END);
   }
   return errors;
 }
@@ -346,7 +341,7 @@ export function buildRequest(values: FormValues, pricesKey?: string): RunRequest
     start: values.start,
     end: values.end,
   };
-  if (values.cycle_budget.trim() !== "") request.cycle_budget = Number(values.cycle_budget.trim());
+  if (values.cycle_budget.trim() !== "") request.cycle_budget = toNumber(values.cycle_budget);
   if (pricesKey) request.prices_key = pricesKey;
   return request;
 }
@@ -355,27 +350,28 @@ export function buildRequest(values: FormValues, pricesKey?: string): RunRequest
 export function roundTrip(values: FormValues): { efficiency: number; markup: number } | null {
   const field = BATTERY_FIELDS.find((f) => f.key === "round_trip_efficiency")!;
   if (numberError(values.battery.round_trip_efficiency, field)) return null;
-  const efficiency = Number(values.battery.round_trip_efficiency);
+  const efficiency = toNumber(values.battery.round_trip_efficiency);
   return { efficiency, markup: 1 / efficiency - 1 };
 }
 
 /** Why this battery could not enter the auction. A warning: the merchant case still runs. */
 export function contractWarnings(values: FormValues): string[] {
   if (BATTERY_FIELDS.some((f) => numberError(values.battery[f.key as BatteryKey], f, f.optional))) return [];
-  const power = Number(values.battery.power_mw);
-  const hours = Number(values.battery.duration_hours);
-  const rte = Number(values.battery.round_trip_efficiency);
+  const power = toNumber(values.battery.power_mw);
+  const hours = toNumber(values.battery.duration_hours);
+  const rte = toNumber(values.battery.round_trip_efficiency);
   const b = physicalBattery(values);
+  const t = messages().validation;
   const out: string[] = [];
-  if (power < CONTRACT_MIN_POWER_MW) out.push(`Under ${CONTRACT_MIN_POWER_MW} MW the project cannot enter the auction.`);
-  if (hours < CONTRACT_MIN_HOURS) out.push(`Under ${CONTRACT_MIN_HOURS} h delivered, the contracted case is not solved.`);
-  if (rte < CONTRACT_MIN_RTE) out.push(`Under ${CONTRACT_MIN_RTE} round trip, the contracted case is not solved.`);
+  if (power < CONTRACT_MIN_POWER_MW) out.push(t.underPower(formatBound(CONTRACT_MIN_POWER_MW)));
+  if (hours < CONTRACT_MIN_HOURS) out.push(t.underHours(formatBound(CONTRACT_MIN_HOURS)));
+  if (rte < CONTRACT_MIN_RTE) out.push(t.underRte(formatBound(CONTRACT_MIN_RTE)));
   // CRCAP 5.1.1(vii) times the contracted 4 h of storage, not the whole volume.
   if (b.max_charge_mw * rte * CONTRACT_MAX_RECHARGE_HOURS < CONTRACT_MIN_HOURS * power * (1 - 1e-9)) {
-    out.push(`If the contracted ${CONTRACT_MIN_HOURS} h take over ${CONTRACT_MAX_RECHARGE_HOURS} h to recharge, the contracted case is not solved.`);
+    out.push(t.slowRecharge(formatBound(CONTRACT_MIN_HOURS), formatBound(CONTRACT_MAX_RECHARGE_HOURS)));
   }
   if (b.max_discharge_mw * b.discharge_efficiency < power * (1 - 1e-9)) {
-    out.push("With a discharge rate under the power delivered, the contracted case is not solved.");
+    out.push(t.slowDischarge);
   }
   return out;
 }
@@ -384,7 +380,7 @@ export function contractWarnings(values: FormValues): string[] {
 export function automaticRates(values: FormValues): { chargeMw: number; dischargeMw: number } | null {
   const sizing = BATTERY_FIELDS.filter((f) => ["power_mw", "duration_hours", "round_trip_efficiency"].includes(f.key));
   if (sizing.some((f) => numberError(values.battery[f.key as BatteryKey], f))) return null;
-  const power = Number(values.battery.power_mw);
+  const power = toNumber(values.battery.power_mw);
   return { chargeMw: power, dischargeMw: power };
 }
 

@@ -3,15 +3,17 @@
 // nulls and with a payload of a few days.
 import type { Result, ResultCase } from "../contracts/types";
 import type { YearFlow } from "../finance/model";
+import { messages } from "../i18n";
 import { brl, brlShort, day, hourLabel, monthLabel, num } from "../lib/format";
 import { bandHeight, cumulative, heatCells, histogram, histogramBars, isNum, mean, negate, pairs, type Value } from "./adapters";
 import type { ChartOption } from "./echarts";
 import type { Palette } from "./theme";
 
 type Fmt = (v: unknown) => string;
-const money: Fmt = (v) => (isNum(v) ? brl(v) : "n/a");
-const price: Fmt = (v) => (isNum(v) ? `R$ ${num(v, 2)}/MWh` : "n/a");
-const mw: Fmt = (v) => (isNum(v) ? `${num(v, 2)} MW` : "n/a");
+const na = () => messages().common.na;
+const money: Fmt = (v) => (isNum(v) ? brl(v) : na());
+const price: Fmt = (v) => (isNum(v) ? `R$ ${num(v, 2)}/MWh` : na());
+const mw: Fmt = (v) => (isNum(v) ? `${num(v, 2)} MW` : na());
 
 function base(p: Palette, grid: Record<string, unknown> = {}) {
   return {
@@ -125,6 +127,7 @@ export function detailCase(r: Result): ResultCase | undefined {
 }
 
 export function cumulativeValue(r: Result, p: Palette): ChartOption {
+  const t = messages().charts;
   const d = r.detail.daily;
   const n = d.date.length;
   return {
@@ -133,11 +136,12 @@ export function cumulativeValue(r: Result, p: Palette): ChartOption {
     yAxis: axis(p, { type: "value", axisLabel: moneyAxis(p) }),
     tooltip: { ...base(p).tooltip, valueFormatter: money },
     dataZoom: zoom(p, n),
-    series: [lineSeries("Cumulative value", pairs(d.date, cumulative(d.value_brl)), p.discharge, { areaStyle: { color: p.dischargeSoft } })],
+    series: [lineSeries(t.cumulativeValue, pairs(d.date, cumulative(d.value_brl)), p.discharge, { areaStyle: { color: p.dischargeSoft } })],
   };
 }
 
 export function monthlyValue(r: Result, p: Palette): ChartOption {
+  const t = messages().charts;
   const m = detailCase(r)?.monthly;
   const months = m?.month ?? [];
   const values = m?.value_brl ?? [];
@@ -148,7 +152,7 @@ export function monthlyValue(r: Result, p: Palette): ChartOption {
     yAxis: axis(p, { type: "value", axisLabel: moneyAxis(p) }),
     series: [
       {
-        name: "Value",
+        name: t.value,
         type: "bar",
         barMaxWidth: 22,
         data: values.map((v) => ({
@@ -162,13 +166,14 @@ export function monthlyValue(r: Result, p: Palette): ChartOption {
 
 /** The merchant balanced year of each submarket, best first. */
 export function rankingBars(r: Result, p: Palette): ChartOption {
+  const t = messages().charts;
   const rows = r.ranking;
   return {
     ...base(p, { top: 16 }),
     tooltip: { ...base(p).tooltip, axisPointer: { type: "shadow" }, valueFormatter: money },
     xAxis: axis(p, { type: "category", data: rows.map((row) => row.submarket), splitLine: { show: false } }),
     yAxis: axis(p, { type: "value", axisLabel: moneyAxis(p) }),
-    series: [{ name: "Merchant, balanced year", type: "bar", barMaxWidth: 56, data: rows.map((row) => row.balanced_year_brl), itemStyle: { color: p.discharge, borderRadius: [3, 3, 0, 0] } }],
+    series: [{ name: t.merchantBalanced, type: "bar", barMaxWidth: 56, data: rows.map((row) => row.balanced_year_brl), itemStyle: { color: p.discharge, borderRadius: [3, 3, 0, 0] } }],
   };
 }
 
@@ -176,36 +181,38 @@ export function rankingBars(r: Result, p: Palette): ChartOption {
 
 /** The day's floor to ceiling with its mean. The axis follows the data: the PLD has no 200 cap. */
 export function dailyPriceBand(r: Result, p: Palette): ChartOption {
+  const t = messages().charts;
   const d = r.detail.daily;
   const n = d.date.length;
   return {
     ...base(p, { bottom: zoomRoom(n) }),
-    legend: legend(p, { data: ["Day's range", "Mean"] }),
+    legend: legend(p, { data: [t.range, t.mean] }),
     tooltip: {
       ...base(p).tooltip,
       formatter: (items: { dataIndex: number }[]) => {
         const i = items[0]?.dataIndex ?? 0;
-        return `<b>${day(d.date[i])}</b><br/>Floor ${price(d.price_min[i])}<br/>Mean ${price(d.price_mean[i])}<br/>Ceiling ${price(d.price_max[i])}`;
+        return `<b>${day(d.date[i])}</b><br/>${t.floor} ${price(d.price_min[i])}<br/>${t.mean} ${price(d.price_mean[i])}<br/>${t.ceiling} ${price(d.price_max[i])}`;
       },
     },
     xAxis: timeAxis(p),
     yAxis: axis(p, { type: "value", name: "R$/MWh", nameGap: 8, min: 0 }),
     dataZoom: zoom(p, n),
     series: [
-      { name: "Day's range", type: "line", stack: "range", data: pairs(d.date, d.price_min), lineStyle: { opacity: 0 }, itemStyle: { color: p.charge }, symbol: "none", silent: true },
-      { name: "Day's range", type: "line", stack: "range", data: pairs(d.date, bandHeight(d.price_min, d.price_max)), lineStyle: { opacity: 0 }, itemStyle: { color: p.charge }, symbol: "none", areaStyle: { color: p.chargeSoft } },
-      lineSeries("Mean", pairs(d.date, d.price_mean), p.discharge, { lineStyle: { width: 1.2, color: p.discharge } }),
+      { name: t.range, type: "line", stack: "range", data: pairs(d.date, d.price_min), lineStyle: { opacity: 0 }, itemStyle: { color: p.charge }, symbol: "none", silent: true },
+      { name: t.range, type: "line", stack: "range", data: pairs(d.date, bandHeight(d.price_min, d.price_max)), lineStyle: { opacity: 0 }, itemStyle: { color: p.charge }, symbol: "none", areaStyle: { color: p.chargeSoft } },
+      lineSeries(t.mean, pairs(d.date, d.price_mean), p.discharge, { lineStyle: { width: 1.2, color: p.discharge } }),
     ],
   };
 }
 
 export function priceProfile(r: Result, p: Palette): ChartOption {
+  const t = messages().charts;
   const pr = r.detail.profile;
   return {
     ...base(p),
     tooltip: { ...base(p).tooltip, valueFormatter: price },
     xAxis: axis(p, { type: "category", data: pr.hour.map(hourLabel), boundaryGap: false, splitLine: { show: false }, axisLabel: { color: p.muted, fontFamily: p.mono, fontSize: 11, interval: 5 } }),
-    yAxis: axis(p, { type: "value", scale: true, name: "mean R$/MWh", nameGap: 8 }),
+    yAxis: axis(p, { type: "value", scale: true, name: t.meanPrice, nameGap: 8 }),
     series: [lineSeries("PLD", pr.price, p.charge)],
   };
 }
@@ -214,6 +221,7 @@ export function priceProfile(r: Result, p: Palette): ChartOption {
 
 /** The representative week in stacked panels sharing one time axis: price, power, storage. */
 export function week(r: Result, p: Palette, compact = false): ChartOption {
+  const c = messages().charts;
   const w = r.detail.week;
   const t = w.hora;
   const grids = compact
@@ -231,12 +239,12 @@ export function week(r: Result, p: Palette, compact = false): ChartOption {
   const bar = (name: string, values: Value[], color: string) => ({ name, type: "bar", stack: "power", xAxisIndex: 1, yAxisIndex: 1, data: pairs(t, values), barWidth: "70%", itemStyle: { color } });
   const series: unknown[] = [
     lineSeries("PLD", pairs(t, w.price), p.muted, { step: "start", lineStyle: { width: 1.5, color: p.muted }, showSymbol: false }),
-    bar("Delivering", w.discharge_mw, p.discharge),
-    bar("Charging", negate(w.charge_mw), p.charge),
+    bar(c.delivering, w.discharge_mw, p.discharge),
+    bar(c.charging, negate(w.charge_mw), p.charge),
   ];
   if (!compact) {
     series.push(
-      lineSeries("Storage", pairs(t, w.storage_mwh), p.muted, {
+      lineSeries(c.storage, pairs(t, w.storage_mwh), p.muted, {
         xAxisIndex: 2,
         yAxisIndex: 2,
         showSymbol: false,
@@ -247,15 +255,15 @@ export function week(r: Result, p: Palette, compact = false): ChartOption {
   }
   const yAxes = [
     axis(p, { gridIndex: 0, type: "value", scale: true, name: compact ? "" : "R$/MWh", nameGap: 6, splitNumber: 3 }),
-    axis(p, { gridIndex: 1, type: "value", name: compact ? "" : "MW  (+ delivering, − charging)", nameGap: 6, splitNumber: 4 }),
+    axis(p, { gridIndex: 1, type: "value", name: compact ? "" : c.powerAxis, nameGap: 6, splitNumber: 4 }),
   ];
   if (!compact) {
-    yAxes.push(axis(p, { gridIndex: 2, type: "value", min: 0, max: Math.ceil(r.battery.volume_mwh * 1.05 * 10) / 10, name: "MWh stored", nameGap: 6, splitNumber: 2 }));
+    yAxes.push(axis(p, { gridIndex: 2, type: "value", min: 0, max: Math.ceil(r.battery.volume_mwh * 1.05 * 10) / 10, name: c.storedAxis, nameGap: 6, splitNumber: 2 }));
   }
   return {
     ...base(p),
     grid: grids,
-    legend: legend(p, { data: compact ? ["PLD", "Delivering", "Charging"] : ["PLD", "Delivering", "Charging", "Storage"] }),
+    legend: legend(p, { data: compact ? ["PLD", c.delivering, c.charging] : ["PLD", c.delivering, c.charging, c.storage] }),
     axisPointer: { link: [{ xAxisIndex: "all" }] },
     tooltip: {
       ...base(p).tooltip,
@@ -263,8 +271,8 @@ export function week(r: Result, p: Palette, compact = false): ChartOption {
         const i = items[0]?.dataIndex ?? 0;
         const stamp = t[i] ?? "";
         const net = (isNum(w.discharge_mw[i]) ? w.discharge_mw[i] : 0) - (isNum(w.charge_mw[i]) ? w.charge_mw[i] : 0);
-        const doing = net > 1e-5 ? `delivering ${mw(net)}` : net < -1e-5 ? `charging ${mw(-net)}` : "idle";
-        return `<b>${day(stamp)} ${stamp.slice(11, 16)}</b><br/>PLD ${price(w.price[i])}<br/>${doing}<br/>Stored ${isNum(w.storage_mwh[i]) ? num(w.storage_mwh[i], 2) + " MWh" : "n/a"}`;
+        const doing = net > 1e-5 ? c.deliveringValue(mw(net)) : net < -1e-5 ? c.chargingValue(mw(-net)) : c.idle;
+        return `<b>${day(stamp)} ${stamp.slice(11, 16)}</b><br/>PLD ${price(w.price[i])}<br/>${doing}<br/>${c.stored} ${isNum(w.storage_mwh[i]) ? num(w.storage_mwh[i], 2) + " MWh" : na()}`;
       },
     },
     xAxis: xAxes,
@@ -275,6 +283,7 @@ export function week(r: Result, p: Palette, compact = false): ChartOption {
 }
 
 export function netPowerHeatmap(r: Result, p: Palette): ChartOption {
+  const t = messages().charts;
   const np = r.detail.net_power;
   const power = r.battery.power_mw;
   const { cells, maxAbs } = heatCells(np.permille.map((row) => row.map((v) => (isNum(v) ? (v / 1000) * power : null))));
@@ -287,7 +296,7 @@ export function netPowerHeatmap(r: Result, p: Palette): ChartOption {
       trigger: "item",
       formatter: (item: { data: [number, number, number] }) => {
         const [d, h, v] = item.data;
-        const what = v > 0 ? "delivering" : v < 0 ? "charging" : "idle";
+        const what = v > 0 ? t.deliveringLower : v < 0 ? t.chargingLower : t.idle;
         return `<b>${day(np.date[d])} ${hourLabel(h)}</b><br/>${mw(Math.abs(v))} ${what}`;
       },
     },
@@ -303,40 +312,42 @@ export function netPowerHeatmap(r: Result, p: Palette): ChartOption {
       top: "middle",
       itemHeight: 140,
       itemWidth: 10,
-      text: ["delivering", "charging"],
+      text: [t.deliveringLower, t.chargingLower],
       textStyle: { color: p.muted, fontFamily: p.font, fontSize: 11 },
       formatter: (v: number) => `${num(v, 1)} MW`,
       inRange: { color: [p.charge, p.surface, p.discharge] },
     },
     dataZoom: zoom(p, n),
-    series: [{ name: "Net power", type: "heatmap", data: cells, progressive: 4000, emphasis: { itemStyle: { borderColor: p.ink, borderWidth: 1 } } }],
+    series: [{ name: t.netPower, type: "heatmap", data: cells, progressive: 4000, emphasis: { itemStyle: { borderColor: p.ink, borderWidth: 1 } } }],
   };
 }
 
 export function profilePower(r: Result, p: Palette): ChartOption {
+  const t = messages().charts;
   const pr = r.detail.profile;
   const labels = pr.hour.map(hourLabel);
   const bar = (name: string, values: Value[], color: string) => ({ name, type: "bar", stack: "power", data: values, itemStyle: { color }, barWidth: "72%" });
   return {
     ...base(p),
-    legend: legend(p, { data: ["Delivering", "Charging"] }),
+    legend: legend(p, { data: [t.delivering, t.charging] }),
     tooltip: {
       ...base(p).tooltip,
       axisPointer: { type: "shadow" },
       formatter: (items: { dataIndex: number }[]) => {
         const i = items[0]?.dataIndex ?? 0;
-        return `<b>${labels[i]}</b>, mean<br/>Charging ${mw(pr.charge_mw[i])}<br/>Delivering ${mw(pr.discharge_mw[i])}`;
+        return `<b>${labels[i]}</b>, ${t.meanSuffix}<br/>${t.charging} ${mw(pr.charge_mw[i])}<br/>${t.delivering} ${mw(pr.discharge_mw[i])}`;
       },
     },
     xAxis: axis(p, { type: "category", data: labels, splitLine: { show: false }, axisLabel: { color: p.muted, fontFamily: p.mono, fontSize: 11, interval: 5 } }),
-    yAxis: axis(p, { type: "value", name: "mean MW  (+ delivering, − charging)", nameGap: 8 }),
-    series: [bar("Delivering", pr.discharge_mw, p.discharge), bar("Charging", negate(pr.charge_mw), p.charge)],
+    yAxis: axis(p, { type: "value", name: t.meanPowerAxis, nameGap: 8 }),
+    series: [bar(t.delivering, pr.discharge_mw, p.discharge), bar(t.charging, negate(pr.charge_mw), p.charge)],
   };
 }
 
 // -- cycles -----------------------------------------------------------------
 
 export function dailyCyclesHistogram(r: Result, p: Palette): ChartOption {
+  const t = messages().charts;
   const values = r.detail.daily.cycles;
   const bars = histogramBars(histogram(values, 40));
   const m = mean(values);
@@ -345,19 +356,19 @@ export function dailyCyclesHistogram(r: Result, p: Palette): ChartOption {
     tooltip: {
       ...base(p).tooltip,
       trigger: "item",
-      formatter: (item: { data: [number, number, number, number] }) => `${num(item.data[2], 2)} to ${num(item.data[3], 2)} cycles<br/><b>${num(item.data[1])}</b> days`,
+      formatter: (item: { data: [number, number, number, number] }) => `${t.cyclesRange(num(item.data[2], 2), num(item.data[3], 2))}<br/><b>${num(item.data[1])}</b> ${t.days}`,
     },
-    xAxis: axis(p, { type: "value", scale: true, name: "cycles in a day", nameLocation: "middle", nameGap: 28, splitLine: { show: false } }),
+    xAxis: axis(p, { type: "value", scale: true, name: t.cyclesAxis, nameLocation: "middle", nameGap: 28, splitLine: { show: false } }),
     yAxis: axis(p, { type: "value", minInterval: 1 }),
     series: [
       {
-        name: "Days",
+        name: t.daysSeries,
         type: "bar",
         data: bars,
         barWidth: "90%",
         itemStyle: { color: p.charge, borderRadius: [2, 2, 0, 0] },
         encode: { x: 0, y: 1 },
-        markLine: isNum(m) ? refLine(p, m, `mean ${num(m, 1)}/day`, "xAxis") : undefined,
+        markLine: isNum(m) ? refLine(p, m, t.meanPerDay(num(m, 1)), "xAxis") : undefined,
       },
     ],
   };
@@ -367,22 +378,23 @@ export function dailyCyclesHistogram(r: Result, p: Palette): ChartOption {
 
 /** Yearly cash flows as bars, with the cumulative position after capex as a line. */
 export function cashFlowChart(flows: YearFlow[], capex: number, p: Palette): ChartOption {
+  const t = messages().charts;
   const labels = ["0", ...flows.map((f) => String(f.year))];
   const values = [-capex, ...flows.map((f) => f.cashFlow)];
   return {
     ...base(p),
-    legend: legend(p, { data: ["Cash flow", "Cumulative"] }),
+    legend: legend(p, { data: [t.cashFlow, t.cumulative] }),
     tooltip: { ...base(p).tooltip, axisPointer: { type: "shadow" }, valueFormatter: money },
-    xAxis: axis(p, { type: "category", data: labels, name: "contract year", nameLocation: "middle", nameGap: 26, splitLine: { show: false } }),
+    xAxis: axis(p, { type: "category", data: labels, name: t.contractYear, nameLocation: "middle", nameGap: 26, splitLine: { show: false } }),
     yAxis: axis(p, { type: "value", axisLabel: moneyAxis(p) }),
     series: [
       {
-        name: "Cash flow",
+        name: t.cashFlow,
         type: "bar",
         barMaxWidth: 26,
         data: values.map((v) => ({ value: v, itemStyle: { color: v < 0 ? p.charge : p.discharge } })),
       },
-      lineSeries("Cumulative", cumulative(values), p.ink, { lineStyle: { width: 1.6, color: p.ink } }),
+      lineSeries(t.cumulative, cumulative(values), p.ink, { lineStyle: { width: 1.6, color: p.ink } }),
     ],
   };
 }

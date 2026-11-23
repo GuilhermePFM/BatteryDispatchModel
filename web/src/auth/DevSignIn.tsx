@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
+import { useI18n } from "../i18n";
 import { useAuth } from "./AuthProvider";
 
 /** Development sign-in: any name and email, sent to the API as Bearer dev:<sub>:<email>. */
 export function DevSignIn() {
   const { devDialogOpen, closeDevDialog, devSignIn } = useAuth();
+  const t = useI18n().t.auth;
   const navigate = useNavigate();
   const ref = useRef<HTMLDialogElement>(null);
   const [name, setName] = useState("Ada Lovelace");
@@ -30,18 +32,18 @@ export function DevSignIn() {
       <form onSubmit={submit}>
         <div>
           <h2 id="dev-title" style={{ fontSize: "1.25rem" }}>
-            Development sign-in
+            {t.devTitle}
           </h2>
           <p className="help" style={{ marginTop: 6 }}>
-            This build has no identity provider. Any name and email will do; the API trusts it in dev mode only.
+            {t.devNote}
           </p>
         </div>
         <div className="field">
-          <label htmlFor="dev-name">Name</label>
+          <label htmlFor="dev-name">{t.name}</label>
           <input id="dev-name" type="text" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
         </div>
         <div className="field">
-          <label htmlFor="dev-email">Email</label>
+          <label htmlFor="dev-email">{t.email}</label>
           <input
             id="dev-email"
             type="email"
@@ -53,10 +55,10 @@ export function DevSignIn() {
         </div>
         <div className="actions" style={{ justifyContent: "flex-end" }}>
           <button type="button" className="btn btn-quiet" onClick={closeDevDialog}>
-            Cancel
+            {t.cancel}
           </button>
           <button type="submit" className="btn btn-primary" disabled={!valid}>
-            Sign in
+            {t.signIn}
           </button>
         </div>
       </form>

@@ -2,6 +2,8 @@
 // business case, ranked by the merchant NPV (model.md §6), recomputed in the
 // browser whenever a financial input changes.
 import type { Result, ResultCase, Submarket } from "../contracts/types";
+import { messages } from "../i18n";
+import { num } from "../lib/format";
 import { measuredCapture, type RevenueBasis } from "./defaults";
 import {
   baseReimbursement,
@@ -119,7 +121,8 @@ export interface SensitivityRow {
 
 /** NPV of one case under one-at-a-time moves of the inputs, around the current values. */
 export function sensitivity(base: FinanceInputs, evaluate: (next: FinanceInputs) => Evaluation, business: "contracted" | "merchant"): SensitivityRow[] {
-  const pp = (value: number) => `${(value * 100).toFixed(1)}%`;
+  const fields = messages().finance.fields;
+  const pp = (value: number) => `${num(value * 100, 1)}%`;
   const row = (label: string, key: keyof FinanceInputs, low: number, high: number, show: (v: number) => string): SensitivityRow => ({
     label,
     low: show(low),
@@ -127,18 +130,18 @@ export function sensitivity(base: FinanceInputs, evaluate: (next: FinanceInputs)
     npvLow: evaluate({ ...base, [key]: low }).npv,
     npvHigh: evaluate({ ...base, [key]: high }).npv,
   });
-  const money = (value: number) => `BRL ${(value / 1e6).toFixed(1)}m`;
+  const money = (value: number) => `BRL ${num(value / 1e6, 1)}m`;
   const rows = [
-    row("IPCA", "ipca", base.ipca - 0.02, base.ipca + 0.02, pp),
-    row("Nominal discount rate", "discountRate", Math.max(0, base.discountRate - 0.02), base.discountRate + 0.02, pp),
-    row("Real PLD growth", "realPldGrowth", base.realPldGrowth - 0.02, base.realPldGrowth + 0.02, pp),
-    row("Capex", "capex", base.capex * 0.8, base.capex * 1.2, money),
-    row("Fixed opex", "opex", base.opex * 0.8, base.opex * 1.2, money),
+    row(fields.ipca.label, "ipca", base.ipca - 0.02, base.ipca + 0.02, pp),
+    row(fields.discountRate.label, "discountRate", Math.max(0, base.discountRate - 0.02), base.discountRate + 0.02, pp),
+    row(fields.realPldGrowth.label, "realPldGrowth", base.realPldGrowth - 0.02, base.realPldGrowth + 0.02, pp),
+    row(fields.capexPerMw.label, "capex", base.capex * 0.8, base.capex * 1.2, money),
+    row(fields.opexPerMw.label, "opex", base.opex * 0.8, base.opex * 1.2, money),
   ];
   if (business === "merchant") {
-    rows.push(row("Capture factor", "captureFactor", base.captureFactor * 0.9, Math.min(1, base.captureFactor * 1.1), (v) => v.toFixed(3)));
+    rows.push(row(fields.captureFactor.label, "captureFactor", base.captureFactor * 0.9, Math.min(1, base.captureFactor * 1.1), (v) => num(v, 3)));
   } else {
-    rows.push(row("Fixed revenue bid", "fixedRevenue", base.fixedRevenue * 0.9, base.fixedRevenue * 1.1, (v) => `BRL ${Math.round(v).toLocaleString("en-US")}`));
+    rows.push(row(fields.bid.label, "fixedRevenue", base.fixedRevenue * 0.9, base.fixedRevenue * 1.1, (v) => `BRL ${num(Math.round(v))}`));
   }
   return rows;
 }
