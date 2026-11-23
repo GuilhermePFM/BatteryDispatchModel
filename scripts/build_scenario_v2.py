@@ -2,8 +2,8 @@
 
     uv run python scripts/build_scenario_v2.py
 
-A 30 MW, 4 h battery with the §2 defaults, over every day of the bundled PLD, in
-the shape of the v2 result schema.
+A 30 MW, 4 h battery with the §2 defaults, the smallest the LRCAP accepts, over
+the last full year of the bundled PLD, in the shape of the v2 result schema.
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ REQUEST: dict[str, Any] = {
         "discharge_efficiency": _ONE_WAY,
         "degradation_pct_per_cycle": 0.001,
     },
-    "start": "2025-01-20",
+    "start": "2025-11-21",
     "end": "2026-11-20",
 }
 

@@ -8,11 +8,13 @@ import {
   contractWarnings,
   CYCLE_BUDGET_FIELD,
   defaultValues,
+  HORIZON_FIELD,
   inspectPriceCsv,
   numberError,
   parseDay,
   physicalBattery,
   roundTrip,
+  startForHorizon,
   validate,
   valuesFromRequest,
 } from "./validation";
@@ -75,6 +77,20 @@ describe("validate", () => {
     const file = { name: "long.csv", size: 10, firstDay: "2023-01-01", lastDay: "2026-12-31" };
     expect(validate({ ...defaultValues(), start: "2023-01-01", end: "2024-12-31" }, file)).toEqual({});
     expect(validate({ ...defaultValues(), start: "2023-01-01", end: "2025-01-01" }, file).end).toMatch(/At most 730 days/);
+  });
+
+  it("defaults to the last full year of the bundled prices", () => {
+    expect(defaultValues()).toMatchObject({ start: "2025-11-21", end: "2026-11-20" });
+    expect(startForHorizon("2026-11-20", 365)).toBe("2025-11-21");
+  });
+
+  it("holds the horizon to whole days between one and two years", () => {
+    expect(numberError("365", HORIZON_FIELD)).toBeNull();
+    expect(numberError("731", HORIZON_FIELD)).toBeNull();
+    expect(numberError("364", HORIZON_FIELD)).toMatch(/At least 365/);
+    expect(numberError("732", HORIZON_FIELD)).toMatch(/At most 731/);
+    expect(numberError("400.5", HORIZON_FIELD)).toMatch(/whole number/);
+    expect(startForHorizon("not a date", 365)).toBeNull();
   });
 
   it("checks an optional cycle budget only when given", () => {
