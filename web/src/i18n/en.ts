@@ -66,6 +66,7 @@ export const en = {
     discharge_rate_mw: { label: "Discharge rate", unit: "MW, to the grid", description: "Up to the power delivered. Below it, only the merchant case is solved." },
     degradation_pct_per_cycle: { label: "Degradation", unit: "% per cycle", description: "Share of the nominal volume lost per full cycle." },
     cycle_budget: { label: "Cycle budget", unit: "cycles", description: "Equivalent full cycles the run may spend over the horizon. Leave empty for no budget." },
+    horizon_days: { label: "Simulation horizon", unit: "days", description: "Days up to the end date, both included. Changing it moves the start date." },
   },
   validation: {
     required: "Required.",

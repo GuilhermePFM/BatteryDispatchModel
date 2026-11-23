@@ -7,6 +7,7 @@ import type { Me } from "../contracts/types";
 import { intlLocale, useI18n } from "../i18n";
 import { numberTag, Rich } from "../i18n/Rich";
 import { localizeServerMessage } from "../i18n/server";
+import { toNumber } from "../lib/decimal";
 import { api, ApiError, describeError, uploadToPresigned } from "../lib/api";
 import { day, num, pct } from "../lib/format";
 import { sha256Hex } from "../lib/sha256";
@@ -19,13 +20,16 @@ import {
   contractWarnings,
   CYCLE_BUDGET_FIELD,
   defaultValues,
+  HORIZON_FIELD,
   MAX_SPAN_DAYS,
   MAX_UPLOAD_BYTES,
   MIN_SPAN_DAYS,
   inspectPriceCsv,
+  numberError,
   physicalBattery,
   roundTrip,
   spanDays,
+  startForHorizon,
   validate,
   type FieldSpec,
   type FormErrors,
@@ -119,6 +123,7 @@ export function Run() {
   const auth = useAuth();
   const navigate = useNavigate();
   const [values, setValues] = useState<FormValues>(readDraft);
+  const [horizon, setHorizon] = useState(() => String(spanDays(values) ?? ""));
   const [touched, setTouched] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [fileInfo, setFileInfo] = useState<PriceFileInfo | null>(null);
@@ -129,8 +134,12 @@ export function Run() {
   const [me, setMe] = useState<Me | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- what it builds reads the active language
-  const errors: FormErrors = useMemo(() => validate(values, fileInfo), [values, fileInfo, locale]);
+  const errors: FormErrors = useMemo(() => {
+    const found = validate(values, fileInfo);
+    const horizonError = numberError(horizon, HORIZON_FIELD);
+    return horizonError ? { ...found, horizon_days: horizonError } : found;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- what it builds reads the active language
+  }, [values, fileInfo, horizon, locale]);
   const shown = touched ? errors : {};
   const valid = Object.keys(errors).length === 0;
   const rt = roundTrip(values);
@@ -223,7 +232,19 @@ export function Run() {
   }
 
   function onChangeDate(key: "start" | "end") {
-    return (e: ChangeEvent<HTMLInputElement>) => setValues((v) => ({ ...v, [key]: e.target.value }));
+    return (e: ChangeEvent<HTMLInputElement>) => {
+      const next = { ...values, [key]: e.target.value };
+      setValues(next);
+      const days = spanDays(next);
+      if (days !== null) setHorizon(String(days));
+    };
+  }
+
+  function onChangeHorizon(text: string) {
+    setHorizon(text);
+    if (numberError(text, HORIZON_FIELD)) return;
+    const start = startForHorizon(values.end, toNumber(text));
+    if (start) setValues((v) => ({ ...v, start }));
   }
 
   const dateMin = fileInfo?.firstDay && !fileInfo.problem ? fileInfo.firstDay : BUNDLED_START;
@@ -301,6 +322,7 @@ export function Run() {
                   <input id="f-start" type="date" value={values.start} min={dateMin} max={dateMax} onChange={onChangeDate("start")} aria-invalid={shown.start ? true : undefined} />
                   {shown.start ? <span className="error-text">{shown.start}</span> : <span className="help">{t.from(day(dateMin))}</span>}
                 </div>
+                <NumberField field={HORIZON_FIELD} name="horizon_days" value={horizon} error={shown.horizon_days} onChange={onChangeHorizon} />
                 <div className="field">
                   <label htmlFor="f-end">
                     <span>{t.end}</span>

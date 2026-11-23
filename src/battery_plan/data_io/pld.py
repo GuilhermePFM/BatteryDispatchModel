@@ -1,9 +1,11 @@
 """The hourly PLD: the CCEE exports, the canonical file built from them, and its upload check.
 
 The CCEE panel exports at most six months at a time, as a wide table with one
-column per day, so the four files in ``data/raw/ccee`` overlap on the days where
+column per day, so the files in ``data/raw/ccee`` can overlap on the days where
 one export ends and the next begins. :func:`build_canonical_pld` keeps one copy
-of each overlapping hour and fails if two exports disagree on it.
+of each overlapping hour and fails if two exports disagree on it. It reads only
+the exports from :data:`PLD_CANONICAL_START` on: the older ones have missing days
+and daylight-saving hours, which the hourly model does not accept.
 
 Hours are local market time and carry no offset: converting ``-03:00`` to UTC
 would move the daily price shape by three hours.
@@ -37,6 +39,9 @@ PLD_CSV_HEADER = "hora,submercado,pld"
 
 #: sha256 of ``data/raw/pld_hourly.csv``; rebuild with ``scripts/build_pld_csv.py``.
 PLD_HOURLY_SHA256 = "2431c61473ae39b0ed949364306974e6ee8b5b88d8d051d6bedb19a688c9b839"
+
+#: The first day of the canonical file; exports that start earlier are kept but not merged.
+PLD_CANONICAL_START = datetime(2025, 1, 20)
 
 #: What each rejection tells the user. Shared word for word with Go and TypeScript.
 PLD_ERRORS: dict[str, str] = {
@@ -201,13 +206,22 @@ def read_ccee_export(path: Path) -> dict[tuple[datetime, str], Decimal]:
     return prices
 
 
+def _export_start(path: Path) -> datetime:
+    """The first day of a CCEE export, read from its header."""
+    with path.open(encoding="ascii", newline="") as handle:
+        header = next(csv.reader(handle, delimiter=";"), [])
+    if len(header) < 3 or header[:2] != ["Hora", "Submercado"]:
+        raise PldDataError(f"{path.name}: not a CCEE hourly price export")
+    return datetime.strptime(header[2], "%d/%m/%Y")
+
+
 def build_canonical_pld(raw_dir: Path = CCEE_RAW_DIR) -> str:
-    """Merge the CCEE exports into the canonical CSV text.
+    """Merge the CCEE exports from :data:`PLD_CANONICAL_START` on into the canonical CSV text.
 
     An hour present in two exports is kept once when both agree, and is an error
     when they do not: a revised price has to be a decision, not a file order.
     """
-    paths = sorted(raw_dir.glob("*.csv"))
+    paths = [p for p in sorted(raw_dir.glob("*.csv")) if _export_start(p) >= PLD_CANONICAL_START]
     if not paths:
         raise PldDataError(f"no CCEE exports in {raw_dir}")
 

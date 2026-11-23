@@ -67,6 +67,7 @@ export const pt: Messages = {
     discharge_rate_mw: { label: "Taxa de descarga", unit: "MW, para a rede", description: "Até a potência entregue. Abaixo dela, só o caso merchant é resolvido." },
     degradation_pct_per_cycle: { label: "Degradação", unit: "% por ciclo", description: "Parcela do volume nominal perdida por ciclo completo." },
     cycle_budget: { label: "Limite de ciclos", unit: "ciclos", description: "Ciclos completos equivalentes que a simulação pode gastar no horizonte. Deixe vazio para não limitar." },
+    horizon_days: { label: "Horizonte da simulação", unit: "dias", description: "Dias até a data final, ambas incluídas. Alterar este valor move a data inicial." },
   },
   validation: {
     required: "Obrigatório.",

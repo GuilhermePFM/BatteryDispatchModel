@@ -15,9 +15,15 @@ exports at most six months at a time, as a wide CSV (`;`, decimal comma) with
 `Hora`, `Submercado` and one column per day. Market facts and sources are in
 [`mercado-brasileiro.md`](mercado-brasileiro.md).
 
+Files are named `pld_horario_<first day>_<last day>.csv` and cover 2018-04-17 to
+2026-11-20. `data/processed/pld_horario.parquet` is all of them in long format,
+one row per hour and submarket, with a unique `inicio_utc`. Twelve days of 2018
+are missing from the source files and stay absent.
+
 ## The canonical file
 
-`data/raw/pld_hourly.csv` (`hora,submercado,pld`) is built from the exports:
+`data/raw/pld_hourly.csv` (`hora,submercado,pld`) is built from the exports that
+start on or after 2025-01-20:
 
 ```bash
 uv run python scripts/build_pld_csv.py

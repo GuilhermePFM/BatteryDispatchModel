@@ -99,6 +99,6 @@ curl -d @event.json http://localhost:9000/2015-03-31/functions/function/invocati
 uv run python scripts/build_scenario_v2.py
 ```
 
-Solves a 30 MW, 4 h battery with the §2 defaults over every day of the bundled
-PLD and writes the v2 result to `web/public/scenarios/pld-2025-2026.json`, the
+Solves a 30 MW, 4 h battery with the §2 defaults over the last full year of the
+bundled PLD (2025-11-21 to 2026-11-20) and writes the v2 result to `web/public/scenarios/pld-2025-2026.json`, the
 dashboard the site opens on.
