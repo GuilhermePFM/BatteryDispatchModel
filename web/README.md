@@ -12,17 +12,19 @@ mise exec -- pnpm build      # dist/
 ```
 
 The build reads files outside `web/`: the JSON Schemas under `../contracts` (form bounds and
-defaults), `../contracts/examples/prices-template.csv` and `../docs/model/model.md` with its
+defaults), `../contracts/examples/pld-template.csv` and `../docs/model/model.md` with its
 figures. Build from a full checkout.
+
+The site answers the investment question in BRL: submarket ranking, Contracted × Merchant and instant sensitivity. `src/finance/` implements §8 of [`model.md`](../docs/model/model.md) in the browser, so a change of capex, IPCA, nominal discount rate or real PLD growth needs no new run and no sign-in. Its tests run against `src/finance/golden-vectors.json`, written by the independent reference `scripts/finance_golden_vectors.py`.
 
 ## Pages
 
 | Route | What |
 | --- | --- |
-| `/` | Intro and the precomputed 2018 to 2020 dashboard, from `public/scenarios/default.json` (a run-record with `result` inline). In dev, a missing file falls back to the contract example with a banner. |
+| `/` | Intro and the precomputed PLD dashboard with the investment layer, from `public/scenarios/pld-2025-2026.json` (a v2 result, written by `scripts/build_scenario_v2.py`). In dev, a missing file falls back to the contract example with a banner. |
 | `/run` | The run form. Sign-in required to send; the draft survives the redirect in sessionStorage. |
-| `/runs/:id` | Polls every 3 s while queued or running; the dashboard and the plan CSV once succeeded. |
-| `/methodology` | `docs/model/model.md` §1 to §6, filtered by `src/methodology/extract.ts` (no bisection, solver tuning or stochastic material) and rendered with KaTeX. |
+| `/runs/:id` | Polls every 3 s while queued or running; the dashboard and the plan CSV once succeeded. A run of an earlier model is flagged and offers a new run. |
+| `/methodology` | `docs/model/model.md` §1 to §6 and §8, filtered by `src/methodology/extract.ts` and rendered with KaTeX. |
 | `/privacy` | Privacy notice. |
 
 ## Configuration

@@ -1,19 +1,26 @@
 import { DownloadSimple, FileCsv, SignIn, WarningCircle, X } from "@phosphor-icons/react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router";
-import templateUrl from "../../../contracts/examples/prices-template.csv?url";
+import templateUrl from "../../../contracts/examples/pld-template.csv?url";
 import { useAuth } from "../auth/AuthProvider";
 import type { Me } from "../contracts/types";
 import { api, ApiError, describeError, uploadToPresigned } from "../lib/api";
 import { day, num, pct } from "../lib/format";
 import { sha256Hex } from "../lib/sha256";
 import {
+  automaticRates,
   BATTERY_FIELDS,
+  BUNDLED_END,
+  BUNDLED_START,
   buildRequest,
+  contractWarnings,
   CYCLE_BUDGET_FIELD,
   defaultValues,
   MAX_SPAN_DAYS,
+  MAX_UPLOAD_BYTES,
+  MIN_SPAN_DAYS,
   inspectPriceCsv,
+  physicalBattery,
   roundTrip,
   spanDays,
   validate,
@@ -32,6 +39,8 @@ function readDraft(): FormValues {
     if (raw) {
       const draft = JSON.parse(raw) as FormValues;
       const base = defaultValues();
+      // A draft saved before the move to the PLD has none of these fields or dates.
+      if (typeof draft.battery?.duration_hours !== "string") return base;
       return { ...base, ...draft, battery: { ...base.battery, ...draft.battery } };
     }
   } catch {
@@ -48,15 +57,14 @@ function saveDraft(values: FormValues) {
   }
 }
 
-const plain = (v: number) => v.toLocaleString("en-GB", { maximumFractionDigits: 6 });
+const plain = (v: number) => v.toLocaleString("en-US", { maximumFractionDigits: 6 });
 function bounds(field: FieldSpec): string {
   return `${plain(field.min)} and ${plain(field.max)}`;
 }
 
 /** Where the schema's description is written for API clients, the form says it its own way. */
 const HELP: Record<string, string> = {
-  lifetime_cycles: "Equivalent full cycles over the battery's life; also the cycle budget when none is set below.",
-  cycle_budget: "Equivalent full cycles the run may spend. Leave empty to use the cycle life.",
+  cycle_budget: "Equivalent full cycles the run may spend over the horizon. Leave empty for no budget.",
 };
 
 interface NumberFieldProps {
@@ -66,10 +74,11 @@ interface NumberFieldProps {
   error?: string;
   optional?: boolean;
   help?: string;
+  placeholder?: string;
   onChange: (value: string) => void;
 }
 
-function NumberField({ field, name, value, error, optional, help, onChange }: NumberFieldProps) {
+function NumberField({ field, name, value, error, optional, help, placeholder, onChange }: NumberFieldProps) {
   const id = `f-${name}`;
   return (
     <div className="field">
@@ -88,7 +97,7 @@ function NumberField({ field, name, value, error, optional, help, onChange }: Nu
         autoComplete="off"
         spellCheck={false}
         value={value}
-        placeholder={optional ? "use the battery's cycle life" : undefined}
+        placeholder={placeholder ?? (optional ? "no budget" : undefined)}
         aria-invalid={error ? true : undefined}
         aria-describedby={`${id}-help`}
         onChange={(e) => onChange(e.target.value)}
@@ -170,8 +179,8 @@ export function Run() {
       setFileInfo(null);
       return;
     }
-    const text = next.size <= 5 * 1024 * 1024 ? await next.text() : "";
-    setFileInfo(inspectPriceCsv(next.name, next.size, text));
+    const data = next.size <= MAX_UPLOAD_BYTES ? new Uint8Array(await next.arrayBuffer()) : new Uint8Array();
+    setFileInfo(inspectPriceCsv(next.name, next.size, data));
     setTouched(true);
   }
 
@@ -223,9 +232,13 @@ export function Run() {
     return (e: ChangeEvent<HTMLInputElement>) => setValues((v) => ({ ...v, [key]: e.target.value }));
   }
 
-  const dateMin = fileInfo?.firstDay && !fileInfo.problem ? fileInfo.firstDay : undefined;
-  const dateMax = fileInfo?.lastDay && !fileInfo.problem ? fileInfo.lastDay : undefined;
+  const dateMin = fileInfo?.firstDay && !fileInfo.problem ? fileInfo.firstDay : BUNDLED_START;
+  const dateMax = fileInfo?.lastDay && !fileInfo.problem ? fileInfo.lastDay : BUNDLED_END;
   const busy = phase !== "idle";
+  const warnings = contractWarnings(values);
+  const sized = errors["battery.power_mw"] || errors["battery.duration_hours"] || errors["battery.round_trip_efficiency"] || errors["battery.charge_rate_mw"] || errors["battery.discharge_rate_mw"] ? null : physicalBattery(values);
+  const automatic = automaticRates(values);
+  const automaticMw = (key: string) => (key === "charge_rate_mw" ? automatic?.chargeMw : key === "discharge_rate_mw" ? automatic?.dischargeMw : undefined);
 
   return (
     <div className="page">
@@ -233,8 +246,8 @@ export function Run() {
         <div className="page-head">
           <h1>Run your own battery</h1>
           <p>
-            Change the battery, upload up to a year of prices, and the solver plans every half hour. Its progress shows
-            live while it works.
+            Change the battery, pick at least a year of the bundled CCEE prices or upload your own PLD, and the solver plans every hour of the four submarkets, contracted and
+            merchant. Its progress shows live while it works. Financial inputs come afterwards, on the results page, and need no new run.
           </p>
         </div>
 
@@ -242,18 +255,24 @@ export function Run() {
           <div>
             <fieldset className="group">
               <legend>The battery</legend>
-              <p className="group-note">Defaults are a 2 MW / 4 MWh battery. Losses are fractions: 0.05 loses 5% of the energy on the way in.</p>
+              <p className="group-note">Defaults are the smallest battery the auction accepts: 30 MW, 4 h delivered, 85% round trip, charging and discharging at 30 MW.</p>
               <div className="fields">
-                {BATTERY_FIELDS.map((field) => (
-                  <NumberField
-                    key={field.key}
-                    field={field}
-                    name={field.key}
-                    value={values.battery[field.key as keyof FormValues["battery"]]}
-                    error={shown[`battery.${field.key}`]}
-                    onChange={(v) => setBattery(field.key, v)}
-                  />
-                ))}
+                {BATTERY_FIELDS.map((field) => {
+                  const auto = automaticMw(field.key);
+                  return (
+                    <NumberField
+                      key={field.key}
+                      field={auto === undefined ? field : { ...field, max: Math.min(field.max, auto) }}
+                      name={field.key}
+                      value={values.battery[field.key as keyof FormValues["battery"]]}
+                      error={shown[`battery.${field.key}`]}
+                      optional={field.optional}
+                      placeholder={field.optional ? (auto === undefined ? "automatic" : `automatic: ${num(auto, 2)}`) : undefined}
+                      help={field.optional ? `${field.description} Empty follows the battery.` : undefined}
+                      onChange={(v) => setBattery(field.key, v)}
+                    />
+                  );
+                })}
               </div>
               <p className="derived">
                 {rt ? (
@@ -262,15 +281,28 @@ export function Run() {
                     <span className="num">{pct(rt.markup, 2)}</span> to pay.
                   </>
                 ) : (
-                  "Enter both losses to see the round trip."
+                  "Enter the efficiency to see the round trip."
                 )}
+                {sized ? (
+                  <>
+                    {" "}
+                    Nominal volume <span className="num">{num(sized.volume_mwh, 1)} MWh</span>, charging at up to <span className="num">{num(sized.max_charge_mw, 2)} MW</span> and discharging at up to{" "}
+                    <span className="num">{num(sized.max_discharge_mw * sized.discharge_efficiency, 2)} MW</span>. A full recharge takes{" "}
+                    <span className="num">{num(sized.volume_mwh / (sized.charge_efficiency * sized.max_charge_mw), 2)} h</span>.
+                  </>
+                ) : null}
               </p>
+              {warnings.map((warning) => (
+                <p className="help" key={warning}>
+                  {warning} The merchant case still runs.
+                </p>
+              ))}
             </fieldset>
 
             <fieldset className="group">
               <legend>Horizon and planning</legend>
               <p className="group-note">
-                Each day is planned with the next day in view (<Link to="/methodology#how-much-foresight-is-enough">why one day is enough</Link>). At most {MAX_SPAN_DAYS} days per run.
+                One program over the whole horizon, per submarket and case (<Link to="/methodology#one-program-per-horizon">why</Link>). Between {MIN_SPAN_DAYS + 1} and {MAX_SPAN_DAYS + 1} days, so every calendar month is seen.
               </p>
               <div className="fields">
                 <div className="field">
@@ -303,8 +335,8 @@ export function Run() {
             <fieldset className="group">
               <legend>Prices</legend>
               <p className="group-note">
-                Your file must have the header <code>timestamp,market_1,market_2</code>, one row per half hour
-                in £/MWh, and be at most 5 MB.
+                Leave this empty to use the bundled CCEE prices. Your own file must have the header <code>hora,submercado,pld</code>, local time, one row per hour and
+                submarket in BRL/MWh, all above zero, and be at most 5 MB. The template shows the format with two days.
               </p>
               <div
                 className={`drop${dragging ? " dragging" : ""}`}
@@ -338,7 +370,7 @@ export function Run() {
                       <FileCsv size={16} aria-hidden="true" /> Choose a CSV
                     </button>
                   )}
-                  <a className="btn btn-quiet" href={templateUrl} download="prices-template.csv">
+                  <a className="btn btn-quiet" href={templateUrl} download="pld-template.csv">
                     <DownloadSimple size={16} aria-hidden="true" /> Template
                   </a>
                 </div>
@@ -357,11 +389,7 @@ export function Run() {
                   </span>
                 ) : fileInfo ? (
                   <span className="help">
-                    {num(fileInfo.size / 1024, 0)} KB, from {day(fileInfo.firstDay)} to {day(fileInfo.lastDay)}. The solver checks every row when the run starts.
-                  </span>
-                ) : shown.prices ? (
-                  <span className="error-text" role="alert">
-                    {shown.prices}
+                    {num(fileInfo.size / 1024, 0)} KB, from {day(fileInfo.firstDay)} to {day(fileInfo.lastDay)}. The solver checks it again when the run starts.
                   </span>
                 ) : (
                   <span className="help">Or drop a file here.</span>
@@ -374,9 +402,9 @@ export function Run() {
             <div className="aside-panel">
               <div className="summary">
                 <span>
-                  <span className="num">{span ? num(span) : "?"}</span> days, <span className="num">{span ? num(span * 48) : "?"}</span> half hours
+                  <span className="num">{span ? num(span) : "?"}</span> days, <span className="num">{span ? num(span * 24) : "?"}</span> hours
                 </span>
-                <span>{file ? `Prices from ${file.name}` : "No price file yet"}</span>
+                <span>{file ? `Prices from ${file.name}` : "Bundled CCEE PLD, 2025 to 2026"}</span>
               </div>
               {failure ? (
                 <div className="banner error" role="alert">

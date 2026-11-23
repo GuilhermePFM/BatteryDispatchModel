@@ -2,18 +2,17 @@
 
 The event source hands over one message at a time (batch size 1). The run
 moves ``queued → running`` on a condition, so a redelivered message finds it
-already taken and does nothing. The dispatch then runs with its progress
-written to the run every few seconds, and the run ends one of three ways
+already taken and does nothing. The eight programs of the portfolio then run
+with their progress written to the run, and the run ends one of three ways
 (``contracts/platform.md``, "Finishing a run"):
 
-* solved: the plan CSV goes to ``plans/<run_id>.csv`` and the run is
-  ``succeeded`` with ``result_json``, the result payload as compact JSON. The
-  solve is given the invocation's remaining time less :data:`FINISH_MARGIN`,
-  so a slow search stops early with a within-budget plan, and says so in the
-  payload's certificate, rather than being killed by the Lambda timeout;
-* the user's mistake — a price file :func:`load_market_prices_csv` rejects, or
-  dates outside the prices — the run is ``failed`` and its quota refunded, and
-  the handler returns normally so the message is not retried;
+* solved: every plan goes to ``plans/<run_id>.csv`` and the run is
+  ``succeeded`` with ``result_json``, the v2 result as compact JSON. The solve
+  is given the invocation's remaining time less :data:`FINISH_MARGIN`;
+* the user's mistake or a stale message — a price file :func:`parse_pld`
+  rejects, dates outside the prices, a message from another contract or model
+  version — or a solve out of time: the run is ``failed`` and its quota
+  refunded, and the handler returns normally so the message is not retried;
 * anything else raises: the message goes to the DLQ, whose handler fails the
   run with ``solver_failed`` and refunds it.
 
@@ -24,7 +23,7 @@ from __future__ import annotations
 
 import dataclasses
 import functools
-import io
+import hashlib
 import json
 import logging
 import os
@@ -42,17 +41,16 @@ from botocore.exceptions import ClientError
 from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 
-from battery_plan.analysis import build_result_payload
-from battery_plan.contracts import config_from_request, spec_from_request
-from battery_plan.data_io import (
-    MARKET_PRICES_XLSX,
-    PriceFileError,
-    load_market_prices,
-    load_market_prices_csv,
+from battery_plan.contracts import (
+    BUNDLED_PLD_SHA256,
+    CONTRACT_VERSION,
+    MODEL_VERSION,
+    check_span,
+    hourly_battery_from_request,
 )
-from battery_plan.data_models import MarketPrices
-from battery_plan.dispatch import run_dispatch
-from battery_plan.reporting import ProgressEvent
+from battery_plan.data_io import PLD_HOURLY_CSV, PldFileError, parse_pld
+from battery_plan.modelling.portfolio import CaseProgress, solve_portfolio
+from battery_plan.result_v2 import MAX_RESULT_BYTES, build_result, plan_csv
 
 log = logging.getLogger("solver")
 log.setLevel(logging.INFO)
@@ -61,14 +59,22 @@ log.setLevel(logging.INFO)
 CONTRACTS_DIR = Path(
     os.environ.get("CONTRACTS_DIR", Path(__file__).resolve().parents[2] / "contracts")
 )
-#: The bundled prices, for a deployment whose image carries them.
-PRICES_XLSX = Path(os.environ.get("PRICES_XLSX", MARKET_PRICES_XLSX))
+#: The bundled hourly PLD; the image copies it next to the handler.
+PLD_CSV = Path(os.environ.get("PLD_CSV", PLD_HOURLY_CSV))
 
-#: Seconds between progress writes: the callback fires once per solved window.
-PROGRESS_INTERVAL = 3.0
 #: Seconds of the invocation kept back from the solve for what follows it:
-#: building the payload, the plan CSV to S3, the success write.
+#: building the result, the plan CSV to S3, the success write.
 FINISH_MARGIN = 45.0
+#: What the user reads when the eight programs do not fit in the invocation.
+TIMEOUT_MESSAGE = (
+    "This run did not finish in the time available and has not counted against your "
+    "daily runs. Try a shorter duration or fewer days."
+)
+#: What the user reads when a run was queued under another contract or model version.
+STALE_MESSAGE = (
+    "This run was queued for an earlier version of the model and has not counted "
+    "against your daily runs. Submit it again."
+)
 #: Tries at the fail-and-refund transaction while concurrent writes cancel it.
 _FAIL_ATTEMPTS = 10
 
@@ -96,9 +102,12 @@ def _deadline(context: object) -> float | None:
 def process(message: dict[str, Any], deadline: float | None = None) -> None:
     """Run one job message to the end, as ``contracts/platform.md`` lays out.
 
-    ``deadline`` (a :func:`time.perf_counter` reading) is when the dispatch
-    must hand back its plan; a search that would run past it stops early.
+    ``deadline`` (a :func:`time.perf_counter` reading) is when the solve must
+    be over. A portfolio that would run past it fails the run and refunds it.
     """
+    if (message.get("version"), message.get("model_version")) != (CONTRACT_VERSION, MODEL_VERSION):
+        _refuse_stale(message)
+        return
     _validator().validate(message)
     run_id, request = message["run_id"], message["request"]
     run = _start(run_id)
@@ -108,27 +117,39 @@ def process(message: dict[str, Any], deadline: float | None = None) -> None:
 
     try:
         prices = _prices(message["prices"])
-    except PriceFileError as error:
+    except PldFileError as error:
         _fail(run, "prices_invalid", str(error))
         return
     try:
-        _check_dates(prices, request)
+        window = _window(prices, request)
     except ValueError as error:
         _fail(run, "request_invalid", str(error))
         return
 
     progress = _Progress(run_id)
-    spec = spec_from_request(request)
-    solved = run_dispatch(spec, prices, config_from_request(request), progress, deadline=deadline)
-    if solved.search.stopped_early:
-        log.info("run %s stopped early after %d passes", run_id, solved.search.passes)
-    result = build_result_payload(solved.plan, spec, solved.params, solved.search)
+    battery = hourly_battery_from_request(request)
+    started = time.perf_counter()
+    limit = None if deadline is None else deadline - started
+    try:
+        portfolio = solve_portfolio(window, battery, time_limit=limit, on_case=progress)
+    except TimeoutError:
+        log.warning("run %s ran out of time", run_id)
+        _fail(run, "solver_failed", TIMEOUT_MESSAGE)
+        return
+    elapsed = time.perf_counter() - started
+    result = json.dumps(
+        build_result(portfolio, battery, request, elapsed),
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+    if len(result.encode()) > MAX_RESULT_BYTES:
+        raise RuntimeError(f"run {run_id}: the result is {len(result.encode())} bytes")
 
     plan_key = f"plans/{run_id}.csv"
     _aws().s3.put_object(
         Bucket=os.environ["DATA_BUCKET"],
         Key=plan_key,
-        Body=solved.plan.to_csv().encode(),
+        Body=plan_csv(portfolio),
         ContentType="text/csv",
     )
     now = _now()
@@ -137,12 +158,28 @@ def process(message: dict[str, Any], deadline: float | None = None) -> None:
         "SET #status = :succeeded, result_json = :result, plan_csv_key = :key, "
         "progress = :progress, finished_at = :now, updated_at = :now",
         succeeded="succeeded",
-        result=json.dumps(result, separators=(",", ":"), allow_nan=False),
+        result=result,
         key=plan_key,
-        progress=progress.record(now),
+        progress=progress.final(now, elapsed),
         now=now,
     )
-    log.info("run %s succeeded in %.1f s", run_id, solved.elapsed)
+    log.info("run %s succeeded in %.1f s", run_id, elapsed)
+
+
+def _refuse_stale(message: dict[str, Any]) -> None:
+    """Fail and refund a run queued under another contract or model version.
+
+    A message without a run id has no run to fail, so it raises and the DLQ
+    handler drops it.
+    """
+    run_id = message.get("run_id")
+    if not isinstance(run_id, str) or not run_id:
+        raise ValueError("a job message without a run_id")
+    run = _start(run_id)
+    if run is None:
+        log.info("run %s is no longer queued: a stale redelivery, skipped", run_id)
+        return
+    _fail(run, "request_invalid", STALE_MESSAGE)
 
 
 def _start(run_id: str) -> dict[str, Any] | None:
@@ -238,65 +275,80 @@ def _fail(run: dict[str, Any], code: str, message: str) -> None:
 
 
 class _Progress:
-    """The ``on_progress`` callback: keeps the latest event and writes it to the run.
+    """The ``on_case`` callback: writes which of the programs is in flight.
 
-    The first event, and any that moves to a new phase or pass, is written at
-    once, so the run page shows where the run is from its first second and a
-    short run still shows its passes; the window-by-window events in between
-    are throttled to one write every :data:`PROGRESS_INTERVAL` seconds. The
-    final event is not written here: it goes out with the success itself.
+    There are at most eight, each taking a second or more, so every one is
+    written. The final state goes out with the success itself.
     """
 
     def __init__(self, run_id: str) -> None:
         self.run_id = run_id
-        self.latest: ProgressEvent | None = None
-        self.written_event: ProgressEvent | None = None
-        self.written = time.monotonic()
+        self.total = 0
 
-    def __call__(self, event: ProgressEvent) -> None:
-        self.latest = event
-        if event.done:
-            return
-        last = self.written_event
-        moved = last is None or (last.phase, last.pass_index) != (event.phase, event.pass_index)
-        if not moved and time.monotonic() - self.written < PROGRESS_INTERVAL:
-            return
-        self.written, self.written_event = time.monotonic(), event
+    def __call__(self, event: CaseProgress) -> None:
+        self.total = event.cases_total
         now = _now()
         _update(
             self.run_id,
             "SET progress = :progress, updated_at = :now",
-            progress=self.record(now),
+            progress={
+                "phase": "solving",
+                "cases_done": event.cases_done,
+                "cases_total": event.cases_total,
+                "submarket": event.submarket,
+                "case": event.case.value,
+                "fraction": event.cases_done / event.cases_total,
+                "elapsed": event.elapsed,
+                "done": False,
+                "updated_at": now,
+            },
             now=now,
         )
 
-    def record(self, now: str) -> dict[str, Any] | None:
-        return (
-            None if self.latest is None else {**dataclasses.asdict(self.latest), "updated_at": now}
-        )
+    def final(self, now: str, elapsed: float) -> dict[str, Any]:
+        return {
+            "phase": "done",
+            "cases_done": self.total,
+            "cases_total": self.total,
+            "submarket": None,
+            "case": None,
+            "fraction": 1,
+            "elapsed": elapsed,
+            "done": True,
+            "updated_at": now,
+        }
 
 
-def _prices(source: dict[str, str]) -> MarketPrices:
+def _prices(source: dict[str, str]) -> pd.DataFrame:
     if source["source"] == "bundled":
         return _bundled_prices()
     body = _aws().s3.get_object(Bucket=source["bucket"], Key=source["key"])["Body"].read()
-    return load_market_prices_csv(io.BytesIO(body))
+    return parse_pld(body)
 
 
 @functools.cache
-def _bundled_prices() -> MarketPrices:
-    """Read once per container: a warm Lambda keeps them."""
-    return load_market_prices(PRICES_XLSX)
+def _bundled_prices() -> pd.DataFrame:
+    """Read once per container: a warm Lambda keeps them.
+
+    The image holds the file at its own path, so the pin is checked here.
+    """
+    data = PLD_CSV.read_bytes()
+    if hashlib.sha256(data).hexdigest() != BUNDLED_PLD_SHA256:
+        raise RuntimeError(f"{PLD_CSV} does not match its pinned sha256")
+    return parse_pld(data)
 
 
-def _check_dates(prices: MarketPrices, request: dict[str, Any]) -> None:
-    """Both dates inside the prices, which the API cannot check on an upload."""
+def _window(prices: pd.DataFrame, request: dict[str, Any]) -> pd.DataFrame:
+    """The whole days of the request, which must lie inside the prices."""
+    check_span(request)
     first, last = pd.Timestamp(request["start"]), pd.Timestamp(request["end"])
-    if first < prices.start or last + pd.Timedelta(hours=23, minutes=30) > prices.end:
+    after = last + pd.Timedelta(days=1)
+    if first < prices.index[0] or after - pd.Timedelta(hours=1) > prices.index[-1]:
         raise ValueError(
             f"The dates {request['start']} to {request['end']} are not all inside the prices, "
-            f"which run from {prices.start:%Y-%m-%d %H:%M} to {prices.end:%Y-%m-%d %H:%M}."
+            f"which run from {prices.index[0]:%Y-%m-%d %H:%M} to {prices.index[-1]:%Y-%m-%d %H:%M}."
         )
+    return prices.loc[(prices.index >= first) & (prices.index < after)]
 
 
 def _update(
@@ -349,7 +401,8 @@ def _aws() -> _Clients:
 @functools.cache
 def _validator() -> Draft202012Validator:
     """The job-message schema, with the other schemas registered for its ``$ref`` s."""
-    schemas = [json.loads(path.read_text()) for path in CONTRACTS_DIR.glob("*.schema.json")]
+    paths = (CONTRACTS_DIR / "v2").glob("*.schema.json")
+    schemas = [json.loads(path.read_text()) for path in paths]
     registry: Registry = Registry().with_resources(
         (schema["$id"], Resource.from_contents(schema)) for schema in schemas
     )

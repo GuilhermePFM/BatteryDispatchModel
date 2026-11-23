@@ -1,20 +1,24 @@
-// TypeScript mirrors of contracts/*.schema.json. The schemas are the source of
-// truth; these types only describe what the browser reads and writes.
+// TypeScript mirrors of contracts/v2/*.schema.json. The schemas are the source
+// of truth; these types only describe what the browser reads and writes.
+import type { MonthlyBlock } from "../finance/model";
 
 export type Nullable<T> = T | null;
 export type Column = Nullable<number>[];
 
+export const CONTRACT_VERSION = 2;
+export const MODEL_VERSION = "pld-hourly-1";
+
+export type Submarket = "SE" | "S" | "NE" | "N";
+export type BusinessCase = "contracted" | "merchant";
+
 export interface BatteryRequest {
-  max_charge_rate_mw: number;
-  max_discharge_rate_mw: number;
-  max_storage_volume_mwh: number;
-  charging_loss_fraction: number;
-  discharging_loss_fraction: number;
-  lifetime_years: number;
-  lifetime_cycles: number;
+  power_mw: number;
+  volume_mwh: number;
+  max_charge_mw: number;
+  max_discharge_mw: number;
+  charge_efficiency: number;
+  discharge_efficiency: number;
   degradation_pct_per_cycle: number;
-  capex_gbp: number;
-  fixed_opex_gbp_per_year: number;
 }
 
 export interface RunRequest {
@@ -28,13 +32,12 @@ export interface RunRequest {
 export type RunStatus = "queued" | "running" | "succeeded" | "failed";
 
 export interface Progress {
-  phase: string;
-  pass_index: number;
-  passes_estimated: Nullable<number>;
-  passes_max: Nullable<number>;
-  pass_fraction: number;
+  phase: "solving" | "done";
+  cases_done: number;
+  cases_total: number;
+  submarket: Nullable<Submarket>;
+  case: Nullable<BusinessCase>;
   fraction: number;
-  cycle_value: number;
   elapsed: number;
   done: boolean;
   updated_at: string;
@@ -46,7 +49,7 @@ export interface RunError {
 }
 
 export interface RunRecord {
-  version: 1;
+  version: 2;
   run_id: string;
   user_sub: string;
   params_hash: string;
@@ -64,180 +67,80 @@ export interface RunRecord {
   plan_csv_url?: string;
 }
 
-export interface SpreadReading {
-  key:
-    | "day_range"
-    | "harvestable_spread"
-    | "volatility"
-    | "market_gap"
-    | "realised"
-    | "price_level";
-  reading: string;
-  gbp_per_unit: Nullable<number>;
-  r2: Nullable<number>;
-  exogenous: boolean;
+/** False for a record or result written by an earlier contract or model version. */
+export function isCurrentRecord(record: { version?: unknown; result?: { version?: unknown; model_version?: unknown } | null }): boolean {
+  if (record.version !== CONTRACT_VERSION) return false;
+  const result = record.result;
+  return !result || (result.version === CONTRACT_VERSION && result.model_version === MODEL_VERSION);
+}
+
+export interface RankingRow {
+  rank: number;
+  submarket: Submarket;
+  balanced_year_brl: number;
+  last_twelve_months_brl: number;
+  regret_brl_per_year: number;
+}
+
+export interface ResultCase {
+  submarket: Submarket;
+  case: BusinessCase;
+  value_brl: number;
+  balanced_year_brl: number;
+  last_twelve_months_brl: number;
+  physical_cycles: number;
+  cycles_per_year: number;
+  max_injection_hours: number;
+  method: "lp" | "lp-relaxation" | "milp";
+  binary_days: number;
+  solve_seconds: number;
+  monthly: MonthlyBlock;
+}
+
+export interface ResultDetail {
+  submarket: Submarket;
+  case: BusinessCase;
+  daily: {
+    date: string[];
+    value_brl: number[];
+    cycles: number[];
+    price_mean: number[];
+    price_min: number[];
+    price_max: number[];
+    storage_end_mwh: number[];
+  };
+  profile: { hour: number[]; price: number[]; charge_mw: number[]; discharge_mw: number[] };
+  week: { hora: string[]; price: number[]; charge_mw: number[]; discharge_mw: number[]; storage_mwh: number[] };
+  net_power: { date: string[]; permille: number[][] };
 }
 
 export interface Result {
-  version: 1;
-  horizon: {
-    start: string;
-    end: string;
-    periods: number;
-    days: number;
-    period_minutes: number;
-  };
+  version: 2;
+  model_version: typeof MODEL_VERSION;
+  horizon: { start: string; end: string; days: number; hours: number };
   battery: {
-    power_charge_mw: number;
-    power_discharge_mw: number;
+    power_mw: number;
     volume_mwh: number;
+    max_charge_mw: number;
+    max_discharge_mw: number;
+    charge_efficiency: number;
+    discharge_efficiency: number;
     round_trip_efficiency: number;
-    breakeven_markup: number;
-    degradation_per_cycle: number;
-    cycle_budget: number;
+    degradation_pct_per_cycle: number;
+    duration_hours: number;
+    contract_cycles_per_physical: number;
+    cycle_budget: Nullable<number>;
   };
-  headline: {
-    profit_gbp: number;
-    net_revenue_market_1_gbp: number;
-    net_revenue_market_2_gbp: number;
-    income_gbp: number;
-    cost_gbp: number;
-    energy_bought_mwh: number;
-    energy_delivered_mwh: number;
-    mean_buy_price_gbp_per_mwh: Nullable<number>;
-    mean_sell_price_gbp_per_mwh: Nullable<number>;
-    cycles_used: number;
-    cycle_budget: number;
-    final_storage_mwh: number;
-    final_usable_volume_mwh: number;
-    periods: number;
-    periods_charging: number;
-    periods_discharging: number;
-    periods_idle: number;
-    profit_per_cycle_gbp: Nullable<number>;
-    degradation_pct: number;
+  eligibility: {
+    contract_eligible: boolean;
+    contract_shortfalls: string[];
+    below_minimum_power: boolean;
+    minimum_power_mw: number;
   };
-  certificate: Nullable<{
-    cycle_value: number;
-    passes: number;
-    stopped_early: boolean;
-    stop_reason: Nullable<"time_limit">;
-    dual_bound_gbp: Nullable<number>;
-    dual_gap: Nullable<number>;
-    plan_gap: Nullable<number>;
-  }>;
-  markets: {
-    share_market_2_dearer: number;
-    mean_spread_gbp_per_mwh: number;
-    bought_market_1_mwh: number;
-    bought_market_2_mwh: number;
-    delivered_market_1_mwh: number;
-    delivered_market_2_mwh: number;
-    share_days_worth_trading: Nullable<number>;
-    selling_periods_per_day: number;
-    buying_periods_per_day: number;
-  };
-  profit_split: {
-    time_arbitrage_gbp: number;
-    market_2_gap_gbp: number;
-    profit_gbp: number;
-    market_2_share: Nullable<number>;
-  };
-  cycles: {
-    used: number;
-    budget: number;
-    prorated_budget: number;
-    prorated_crossed_at: Nullable<string>;
-    volume_lost_mwh: number;
-    realised_margin_gbp_per_mwh: Nullable<number>;
-    cycles_per_day: Nullable<number>;
-    forgone_per_year_gbp: Nullable<number>;
-  };
-  yardstick: {
-    total_gbp: number;
-    ratio: Nullable<number>;
-    days_below: number;
-    days: number;
-    volume_mwh: number;
-  };
-  costs: {
-    years: number;
-    capex_gbp: number;
-    fixed_opex_gbp: number;
-    total_gbp: number;
-    shortfall_gbp: number;
-  };
-  checks: {
-    both_charging_and_delivering: number;
-    market_2_not_flat_hours: number;
-    over_rate_limit: number;
-    over_degraded_volume: number;
-    over_cycle_budget: number;
-  };
-  spread_explanation: SpreadReading[];
-  series: {
-    daily: {
-      date: string[];
-      profit_gbp: Column;
-      cycles: Column;
-      cycles_cumulative: Column;
-      usable_volume_mwh: Column;
-      mean_price: Column;
-      buy_floor: Column;
-      sell_ceiling: Column;
-      day_range: Column;
-      harvestable_spread: Column;
-      delivered_mwh: Column;
-      yardstick_gbp: Column;
-    };
-    monthly: {
-      month: string[];
-      price_1_mean: Column;
-      price_1_p10: Column;
-      price_1_p90: Column;
-      price_2_mean: Column;
-      price_2_p10: Column;
-      price_2_p90: Column;
-      profit_gbp: Column;
-    };
-    quarterly: { quarter: string[]; mean_price: Column; harvestable_spread: Column };
-    yearly: {
-      year: number[];
-      profit_gbp: Column;
-      mean_price_1: Column;
-      mean_price_2: Column;
-      cycles: Column;
-      mean_day_range: Column;
-      mean_harvestable: Column;
-      profit_per_cycle: Column;
-      yardstick_median_ratio: Column;
-      share_days_beating_yardstick: Column;
-    };
-    profile: {
-      hour: number[];
-      price_1: Column;
-      price_2: Column;
-      charge_1_mw: Column;
-      charge_2_mw: Column;
-      discharge_1_mw: Column;
-      discharge_2_mw: Column;
-      share_charging: Column;
-      share_delivering: Column;
-      share_idle: Column;
-    };
-    spread_histogram: { clip: number; edges: number[]; counts: number[] };
-    net_power: { days: string[]; hours: number[]; values: Column[] };
-    week: {
-      timestamp: string[];
-      price_1: Column;
-      price_2: Column;
-      charge_1_mw: Column;
-      charge_2_mw: Column;
-      discharge_1_mw: Column;
-      discharge_2_mw: Column;
-      storage_mwh: Column;
-    };
-  };
+  ranking: RankingRow[];
+  cases: ResultCase[];
+  detail: ResultDetail;
+  solve_seconds: number;
 }
 
 export interface Me {

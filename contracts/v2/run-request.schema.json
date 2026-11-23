@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://batteryplan.invalid/contracts/v2/run-request.schema.json",
+  "title": "Run request, version 2",
+  "description": "Body of POST /api/runs: the physical battery and the horizon, and nothing financial. Financial inputs live in the browser and never enter this request or the params hash. Rules a schema cannot state are in contracts/README.md: 364 <= end - start <= 730 days, and the dates inside the price data.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["battery", "start", "end"],
+  "properties": {
+    "battery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "power_mw",
+        "volume_mwh",
+        "max_charge_mw",
+        "max_discharge_mw",
+        "charge_efficiency",
+        "discharge_efficiency",
+        "degradation_pct_per_cycle"
+      ],
+      "properties": {
+        "power_mw": {
+          "description": "Power delivered to the grid (P of model.md §2), the contracted availability in the contracted case, MW.",
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 2000,
+          "default": 30
+        },
+        "volume_mwh": {
+          "description": "Nominal storage volume before degradation (E), MWh.",
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 60000
+        },
+        "max_charge_mw": {
+          "description": "Maximum charge rate, on the grid side, MW.",
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 20000
+        },
+        "max_discharge_mw": {
+          "description": "Maximum discharge rate, on the storage side, MW.",
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 20000
+        },
+        "charge_efficiency": {
+          "description": "One-way charging efficiency: the share of grid energy that reaches the store.",
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 1
+        },
+        "discharge_efficiency": {
+          "description": "One-way discharging efficiency: the share of stored energy that reaches the grid.",
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 1
+        },
+        "degradation_pct_per_cycle": {
+          "description": "Percent of the nominal volume lost per equivalent full cycle.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.1,
+          "default": 0.001
+        }
+      }
+    },
+    "cycle_budget": {
+      "description": "Physical equivalent full cycles allowed over the run's horizon. Omitted, not null, when there is no budget.",
+      "type": "number",
+      "minimum": 1,
+      "maximum": 100000
+    },
+    "start": {
+      "description": "First day, local market time.",
+      "type": "string",
+      "format": "date",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "end": {
+      "description": "Last day, included whole.",
+      "type": "string",
+      "format": "date",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "prices_key": {
+      "description": "S3 key of an uploaded hourly PLD CSV, uploads/<sha256>.csv. Absent: the bundled CCEE series.",
+      "type": "string",
+      "pattern": "^uploads/[0-9a-f]{64}\\.csv$"
+    }
+  }
+}

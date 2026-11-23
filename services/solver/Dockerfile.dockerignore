@@ -3,7 +3,8 @@
 !pyproject.toml
 !uv.lock
 !src/battery_plan/
-!contracts/*.schema.json
+!data/raw/pld_hourly.csv
+!contracts/v2/*.schema.json
 !services/solver/handler.py
 !services/solver/local_worker.py
 **/__pycache__
