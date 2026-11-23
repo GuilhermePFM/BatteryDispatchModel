@@ -29,10 +29,10 @@ describe("the default inputs", () => {
   });
 
   it("interpolates the measured capture factor and holds it outside the table", () => {
-    expect(measuredCapture("SE", 4)).toBe(0.98);
+    expect(measuredCapture("SE", 4)).toBe(0.981);
     expect(measuredCapture("SE", 5)).toBeCloseTo(0.979, 6);
     expect(measuredCapture("N", 1)).toBe(0.968);
-    expect(measuredCapture("N", 24)).toBe(0.949);
+    expect(measuredCapture("N", 24)).toBe(0.941);
   });
 });
 

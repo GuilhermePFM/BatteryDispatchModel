@@ -21,24 +21,22 @@ A solve is **one program over the whole horizon**, per submarket and case, in
 
 ## Measured: the hourly PLD engine
 
-All figures come from `scripts/measure_pld_dispatch.py` on the 670 days of CCEE data (20/01/2025 to 20/11/2026), on a 20-thread development machine and not on a Lambda. The test battery delivers 1 MW for 4 h, with an RTE of 85%, 0.001% fade per cycle and the §2 default charge rate of `E / (6 η_c)`.
+All figures come from `scripts/measure_pld_dispatch.py` on the 670 days of CCEE data (20/01/2025 to 20/11/2026), on a 20-thread development machine and not on a Lambda. The test battery delivers 1 MW for 4 h, with an RTE of 85%, 0.001% fade per cycle and the §2 default charge rate of `P`, symmetric with the power delivered.
 
 ### The eight programs
 
 | Submarket | Merchant, balanced year (BRL/MW-year) | Merchant, last 12 months | Merchant solve | Contracted solve |
 | --- | --: | --: | --: | --: |
-| SE | 234,912 | 291,133 | 1.96 s | 2.99 s |
-| NE | 217,250 | 266,720 | 1.36 s | 2.28 s |
-| N | 205,121 | 264,575 | 1.38 s | 2.28 s |
-| S | 193,692 | 219,932 | 1.43 s | 2.31 s |
+| SE | 244,503 | 298,920 | 2.00 s | 3.07 s |
+| NE | 223,802 | 271,736 | 1.42 s | 2.10 s |
+| N | 211,907 | 270,095 | 1.47 s | 2.09 s |
+| S | 201,233 | 224,983 | 1.49 s | 2.40 s |
 
-All eight take 17.4 s and peak at 285 MB. The values are nominal perfect-foresight ceilings, with no IPCA restatement.
-
-**These differ from the planning figures** of BRL 244,498 and 298,910 for SE. Those assumed a charge limit of 1 MW on the grid side: the same program at that rate gives 244,503 and 298,920. The §2 default of 0.784 MW is 3.9% lower on the balanced year.
+All eight take 17.5 s and peak at 281 MB. The values are nominal perfect-foresight ceilings, with no IPCA restatement.
 
 ### The 12 h limit
 
-The limit **did not bind on real prices**. Across 28 contracted configurations (4 to 24 h, four submarkets), no day of the relaxed plan exceeded 10 injection hours, so every one was settled by the LP, in at most 2.8 s. The daily limit of two contractual cycles caps delivery at `8P` MWh, which takes 8 h at full power whatever the battery's duration.
+The limit **did not bind on real prices**. Across 28 contracted configurations (4 to 24 h, four submarkets), no day of the relaxed plan exceeded 9 injection hours, so every one was settled by the LP, in at most 2.7 s. The daily limit of two contractual cycles caps delivery at `8P` MWh, which takes 8 h at full power whatever the battery's duration.
 
 The MILP path was therefore forced, each solve capped at 150 s (a quarter of the Lambda's 600 s):
 
@@ -50,6 +48,8 @@ The MILP path was therefore forced, each solve capped at 150 s (a quarter of the
 | Limit tightened to 6 h | 12 | 63.6 s | all solved |
 | Limit tightened to 4 h, 4 h battery (140 s cap) | 4 | over 140 s | **2 of 4 timed out** (SE, NE) |
 
+This table was measured at the earlier charge rate of `E / (6 η_c)`. Rerun for SE at the current default, the slowest solve was 50.9 s, and the two 12 h solves with a binary on all 670 days took 49.6 s and 31.7 s. The other submarkets were not rerun.
+
 The first four rows ran as two concurrent processes, peaking at 809 MB against the Lambda's 1,769 MB. The whole 4x2 grid of an 8 h battery under a 6 h limit took 209 s and 515 MB. The 4 h row is not a contract setting: it is three times tighter than the 12 h of CRCAP 5.1.1(iii). A solve that reaches its time limit raises an error and never returns a partial plan.
 
 The MILP stops at a **0.1% gap**. At 0.01% the 8 h limit on an 8 h battery no longer finished in 90 s, and at 0.001% it did not finish in 600 s. Case C's value is a proxy for the ONS dispatch and not revenue, so this tolerance does not reach the cash flows directly.
@@ -60,10 +60,10 @@ Each day is decided seeing that day's 24 prices and none of the next, with the s
 
 | Duration | SE | S | NE | N | Range, last 12 months |
 | --- | --: | --: | --: | --: | --: |
-| 2 h | 0.981 | 0.975 | 0.967 | 0.968 | 0.981–0.989 |
-| **4 h** | **0.980** | **0.972** | **0.965** | **0.965** | 0.978–0.988 |
-| 6 h | 0.978 | 0.969 | 0.961 | 0.961 | 0.973–0.987 |
-| 8 h | 0.966 | 0.956 | 0.950 | 0.949 | 0.956–0.971 |
+| 2 h | 0.983 | 0.977 | 0.967 | 0.968 | 0.978–0.990 |
+| **4 h** | **0.981** | **0.974** | **0.965** | **0.966** | 0.977–0.989 |
+| 6 h | 0.977 | 0.967 | 0.959 | 0.960 | 0.972–0.986 |
+| 8 h | 0.959 | 0.947 | 0.941 | 0.941 | 0.950–0.968 |
 
 This is still an **upper bound on what an operator captures**. It removes the view of tomorrow but keeps a perfect view of today's prices, and it includes no forecast error.
 

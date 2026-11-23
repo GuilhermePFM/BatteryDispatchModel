@@ -40,9 +40,11 @@ export interface FieldSpec {
   default: number | undefined;
   description: string;
   step: string;
+  /** Empty is valid: the value is then derived from the other fields. */
+  optional?: boolean;
 }
 
-export type BatteryKey = "power_mw" | "duration_hours" | "round_trip_efficiency" | "recharge_hours" | "degradation_pct_per_cycle";
+export type BatteryKey = "power_mw" | "duration_hours" | "round_trip_efficiency" | "charge_rate_mw" | "discharge_rate_mw" | "degradation_pct_per_cycle";
 
 /** Each one-way efficiency is at least the schema's minimum, so the round trip is at least its square. */
 const MIN_ROUND_TRIP = batteryProps.charge_efficiency.minimum * batteryProps.discharge_efficiency.minimum;
@@ -82,15 +84,28 @@ export const BATTERY_FIELDS: FieldSpec[] = [
     step: "0.01",
   },
   {
-    key: "recharge_hours",
-    label: "Full recharge",
-    unit: "hours",
-    min: 0.25,
-    max: 48,
+    key: "charge_rate_mw",
+    label: "Charge rate",
+    unit: "MW, from the grid",
+    min: batteryProps.max_charge_mw.minimum,
+    max: batteryProps.max_charge_mw.maximum,
     integer: false,
-    default: 6,
-    description: "Hours to refill the whole store. The contract needs the contracted 4 h back within 6.",
-    step: "0.5",
+    default: undefined,
+    description: "The contract needs the contracted 4 h back within 6 h.",
+    step: "1",
+    optional: true,
+  },
+  {
+    key: "discharge_rate_mw",
+    label: "Discharge rate",
+    unit: "MW, to the grid",
+    min: batteryProps.max_discharge_mw.minimum,
+    max: batteryProps.max_discharge_mw.maximum,
+    integer: false,
+    default: undefined,
+    description: "The contract needs at least the power delivered.",
+    step: "1",
+    optional: true,
   },
   {
     key: "degradation_pct_per_cycle",
@@ -148,12 +163,15 @@ const tidy = (value: number) => String(Math.round(value * 1e6) / 1e6);
 export function valuesFromRequest(request: RunRequest): FormValues {
   const values = defaultValues();
   const b = request.battery;
-  if (b && [b.power_mw, b.volume_mwh, b.max_charge_mw, b.charge_efficiency, b.discharge_efficiency].every((v) => typeof v === "number" && v > 0)) {
+  if (b && [b.power_mw, b.volume_mwh, b.max_charge_mw, b.max_discharge_mw, b.charge_efficiency, b.discharge_efficiency].every((v) => typeof v === "number" && v > 0)) {
+    const delivered = b.max_discharge_mw * b.discharge_efficiency;
     values.battery = {
       power_mw: tidy(b.power_mw),
       duration_hours: tidy((b.volume_mwh * b.discharge_efficiency) / b.power_mw),
       round_trip_efficiency: tidy(b.charge_efficiency * b.discharge_efficiency),
-      recharge_hours: tidy(b.volume_mwh / (b.charge_efficiency * b.max_charge_mw)),
+      // A rate that matches the automatic one stays empty, so it keeps following the battery.
+      charge_rate_mw: Math.abs(b.max_charge_mw - b.power_mw) < 1e-6 ? "" : String(b.max_charge_mw),
+      discharge_rate_mw: Math.abs(delivered - b.power_mw) < 1e-6 ? "" : String(delivered),
       degradation_pct_per_cycle: String(b.degradation_pct_per_cycle ?? values.battery.degradation_pct_per_cycle),
     };
   }
@@ -226,14 +244,16 @@ export function physicalBattery(values: FormValues): BatteryRequest {
   const power = Number(values.battery.power_mw.trim());
   const hours = Number(values.battery.duration_hours.trim());
   const rte = Number(values.battery.round_trip_efficiency.trim());
-  const recharge = Number(values.battery.recharge_hours.trim());
+  const charge = values.battery.charge_rate_mw.trim();
+  const discharge = values.battery.discharge_rate_mw.trim();
   const oneWay = Math.sqrt(rte);
   const volume = (hours * power) / oneWay;
   return {
     power_mw: power,
     volume_mwh: volume,
-    max_charge_mw: volume / (recharge * oneWay),
-    max_discharge_mw: power / oneWay,
+    max_charge_mw: charge === "" ? power : Number(charge),
+    // The form states the rate at the grid; the request measures it in the store.
+    max_discharge_mw: (discharge === "" ? power : Number(discharge)) / oneWay,
     charge_efficiency: oneWay,
     discharge_efficiency: oneWay,
     degradation_pct_per_cycle: Number(values.battery.degradation_pct_per_cycle.trim()),
@@ -244,7 +264,7 @@ export function physicalBattery(values: FormValues): BatteryRequest {
 export function validate(values: FormValues, file?: PriceFileInfo | null): FormErrors {
   const errors: FormErrors = {};
   for (const field of BATTERY_FIELDS) {
-    const error = numberError(values.battery[field.key as BatteryKey], field);
+    const error = numberError(values.battery[field.key as BatteryKey], field, field.optional);
     if (error) errors[`battery.${field.key}`] = error;
   }
   if (!Object.keys(errors).length) {
@@ -255,10 +275,11 @@ export function validate(values: FormValues, file?: PriceFileInfo | null): FormE
       errors["battery.duration_hours"] = `This makes ${formatBound(b.volume_mwh)} MWh; the least is ${formatBound(batteryProps.volume_mwh.minimum)}.`;
     }
     if (b.max_charge_mw > batteryProps.max_charge_mw.maximum || b.max_charge_mw < batteryProps.max_charge_mw.minimum) {
-      errors["battery.recharge_hours"] = `This needs a charge rate of ${formatBound(b.max_charge_mw)} MW, outside ${formatBound(batteryProps.max_charge_mw.minimum)} to ${formatBound(batteryProps.max_charge_mw.maximum)}.`;
+      errors["battery.charge_rate_mw"] = `This needs a charge rate of ${formatBound(b.max_charge_mw)} MW, outside ${formatBound(batteryProps.max_charge_mw.minimum)} to ${formatBound(batteryProps.max_charge_mw.maximum)}.`;
     }
     if (b.max_discharge_mw > batteryProps.max_discharge_mw.maximum) {
-      errors["battery.power_mw"] = `This needs a discharge rate above ${formatBound(batteryProps.max_discharge_mw.maximum)} MW.`;
+      const key = values.battery.discharge_rate_mw.trim() === "" ? "battery.power_mw" : "battery.discharge_rate_mw";
+      errors[key] = `This needs a discharge rate above ${formatBound(batteryProps.max_discharge_mw.maximum)} MW.`;
     }
   }
   const budget = numberError(values.cycle_budget, CYCLE_BUDGET_FIELD, true);
@@ -319,20 +340,31 @@ export function roundTrip(values: FormValues): { efficiency: number; markup: num
 
 /** Why this battery could not enter the auction. A warning: the merchant case still runs. */
 export function contractWarnings(values: FormValues): string[] {
-  if (BATTERY_FIELDS.some((f) => numberError(values.battery[f.key as BatteryKey], f))) return [];
+  if (BATTERY_FIELDS.some((f) => numberError(values.battery[f.key as BatteryKey], f, f.optional))) return [];
   const power = Number(values.battery.power_mw);
   const hours = Number(values.battery.duration_hours);
   const rte = Number(values.battery.round_trip_efficiency);
-  const recharge = Number(values.battery.recharge_hours);
+  const b = physicalBattery(values);
   const out: string[] = [];
   if (power < CONTRACT_MIN_POWER_MW) out.push(`Under ${CONTRACT_MIN_POWER_MW} MW the project cannot enter the auction.`);
   if (hours < CONTRACT_MIN_HOURS) out.push(`Under ${CONTRACT_MIN_HOURS} h delivered, the contracted case is not solved.`);
   if (rte < CONTRACT_MIN_RTE) out.push(`Under ${CONTRACT_MIN_RTE} round trip, the contracted case is not solved.`);
   // CRCAP 5.1.1(vii) times the contracted 4 h of storage, not the whole volume.
-  if ((recharge * CONTRACT_MIN_HOURS) / hours > CONTRACT_MAX_RECHARGE_HOURS * (1 + 1e-9)) {
+  if (b.max_charge_mw * rte * CONTRACT_MAX_RECHARGE_HOURS < CONTRACT_MIN_HOURS * power * (1 - 1e-9)) {
     out.push(`If the contracted ${CONTRACT_MIN_HOURS} h take over ${CONTRACT_MAX_RECHARGE_HOURS} h to recharge, the contracted case is not solved.`);
   }
+  if (b.max_discharge_mw * b.discharge_efficiency < power * (1 - 1e-9)) {
+    out.push("With a discharge rate under the power delivered, the contracted case is not solved.");
+  }
   return out;
+}
+
+/** What an empty rate field resolves to, or null while the sizing fields are invalid. */
+export function automaticRates(values: FormValues): { chargeMw: number; dischargeMw: number } | null {
+  const sizing = BATTERY_FIELDS.filter((f) => ["power_mw", "duration_hours", "round_trip_efficiency"].includes(f.key));
+  if (sizing.some((f) => numberError(values.battery[f.key as BatteryKey], f))) return null;
+  const power = Number(values.battery.power_mw);
+  return { chargeMw: power, dischargeMw: power };
 }
 
 /** Days covered by a valid start and end, inclusive. */

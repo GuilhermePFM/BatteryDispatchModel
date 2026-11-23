@@ -135,10 +135,10 @@ of CCEE data ([`docs/solve.md`](docs/solve.md)):
 
 | Submarket | Merchant, balanced year (BRL/MW-year) | Last 12 months | Capture factor (24+0) |
 | --- | --: | --: | --: |
-| SE | 234,912 | 291,133 | 0.980 |
-| NE | 217,250 | 266,720 | 0.965 |
-| N | 205,121 | 264,575 | 0.965 |
-| S | 193,692 | 219,932 | 0.972 |
+| SE | 244,503 | 298,920 | 0.981 |
+| NE | 223,802 | 271,736 | 0.965 |
+| N | 211,907 | 270,095 | 0.966 |
+| S | 201,233 | 224,983 | 0.974 |
 
 These are perfect-foresight ceilings before the capture factor. The capture factor
 is itself an upper bound, since the backtest sees each day's prices in full.

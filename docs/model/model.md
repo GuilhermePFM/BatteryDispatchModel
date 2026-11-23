@@ -63,15 +63,17 @@ documents are indexed in
 | $p_{s,t}$ | data | – | hourly PLD of submarket $s$ in BRL/MWh, above zero |
 | $P$ | input | MW | power delivered to the grid, the contracted availability in case C |
 | $E$ | $4P/\eta_d$ | MWh | nominal storage volume, before degradation |
-| $\overline{C}$ | $E / (6\,\eta_c)$ | MW | maximum charge rate, on the grid side |
+| $\overline{C}$ | $P$ | MW | maximum charge rate, on the grid side |
 | $\overline{D}$ | $P / \eta_d$ | MW | maximum discharge rate, on the storage side |
 | $\eta_c,\ \eta_d$ | $\sqrt{0.85}$ | – | one-way charge and discharge efficiencies |
 | $\rho$ | $10^{-5}$ | /cycle | storage volume lost per equivalent full cycle |
 | $\overline{L}$ | none | cycles | optional cycle-life budget over the horizon |
 | $\kappa$ | $\eta_d E / (4P)$ | – | contractual full cycles per physical full cycle |
 
-The defaults size a battery exactly to the contract: four hours delivered, a
-full recharge in six hours and a round-trip efficiency of 85%. With these
+The defaults size a battery to the contract: four hours delivered and a
+round-trip efficiency of 85%. Charge and discharge are symmetric at $P$ on the
+grid side, so a full recharge takes $4 / 0.85 \approx 4.7$ h, inside the six
+hours the contract allows. With these
 defaults $\kappa = 1$. An oversized battery has $\kappa > 1$, because one
 physical cycle then delivers more than one contractual cycle.
 
@@ -358,7 +360,7 @@ It is still an upper bound, since the backtest sees each day's prices in full.
 ## 7. Results
 
 On the CCEE data, a battery delivering 1 MW for 4 h at the §2 defaults earns a
-balanced-year merchant value of BRL 234,912 per MW-year in SE, and BRL 291,133
+balanced-year merchant value of BRL 244,503 per MW-year in SE, and BRL 298,920
 over the last twelve months, a spread that shows how much the choice of period
 moves the answer. Both are perfect-foresight ceilings. The four submarkets and
 the solve times are in [`solve.md`](../solve.md#the-eight-programs).

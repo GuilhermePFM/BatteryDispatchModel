@@ -2,7 +2,7 @@
  "battery": {
   "power_mw": 30,
   "volume_mwh": 130.1582746911937,
-  "max_charge_mw": 23.52941176470588,
+  "max_charge_mw": 30,
   "max_discharge_mw": 32.539568672798424,
   "charge_efficiency": 0.9219544457292888,
   "discharge_efficiency": 0.9219544457292888,
